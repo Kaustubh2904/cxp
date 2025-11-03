@@ -14,6 +14,7 @@
                 <ul class="nav-links">
                     <li><a href="#" onclick="showSection('companies')">Companies</a></li>
                     <li><a href="#" onclick="showSection('drives')">Drives</a></li>
+                    <li><a href="#" onclick="showSection('approvals')">Pending Approvals</a></li>
                     <li><a href="#" onclick="showSection('colleges')">Colleges</a></li>
                     <li><a href="#" onclick="showSection('groups')">Student Groups</a></li>
                     <li><a href="#" class="logout-btn">Logout</a></li>
@@ -55,25 +56,42 @@
 
             <!-- Companies Section -->
             <div id="companies-section" class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h3 class="card-title">Company Management</h3>
-                    <button class="btn btn-primary" onclick="loadCompanies()">Refresh</button>
+                <div class="card-header">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h3 class="card-title mb-0">Company Management</h3>
+                        <div class="btn-group">
+                            <button id="company-filter-pending" class="btn btn-primary btn-sm" onclick="loadCompanies('pending')">
+                                <i class="fas fa-clock"></i> Pending
+                            </button>
+                            <button id="company-filter-approved" class="btn btn-outline-primary btn-sm" onclick="loadCompanies('approved')">
+                                <i class="fas fa-check"></i> Active
+                            </button>
+                            <button id="company-filter-suspended" class="btn btn-outline-primary btn-sm" onclick="loadCompanies('suspended')">
+                                <i class="fas fa-ban"></i> Suspended
+                            </button>
+                            <button id="company-filter-rejected" class="btn btn-outline-primary btn-sm" onclick="loadCompanies('rejected')">
+                                <i class="fas fa-times"></i> Rejected
+                            </button>
+                            <button id="company-filter-all" class="btn btn-outline-primary btn-sm" onclick="loadCompanies('all')">
+                                <i class="fas fa-list"></i> All
+                            </button>
+                        </div>
+                    </div>
                 </div>
                 <div class="table-responsive">
                     <table class="table">
                         <thead>
                             <tr>
-                                <th>ID</th>
-                                <th>Name</th>
-                                <th>Email</th>
-                                <th>Registration Date</th>
+                                <th>#</th>
+                                <th>Company Details</th>
+                                <th>Registered</th>
                                 <th>Status</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody id="companies-table-body">
                             <tr>
-                                <td colspan="6" class="text-center">Loading...</td>
+                                <td colspan="5" class="text-center">Loading...</td>
                             </tr>
                         </tbody>
                     </table>
@@ -82,36 +100,101 @@
 
             <!-- Drives Section -->
             <div id="drives-section" class="card" style="display: none;">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h3 class="card-title">Drive Management</h3>
-                    <div>
-                        <button class="btn btn-warning" onclick="loadDrives('pending')">Pending Approval</button>
-                        <button class="btn btn-success" onclick="loadDrives('approved')">Approved</button>
-                        <button class="btn btn-danger" onclick="loadDrives('rejected')">Rejected</button>
-                        <button class="btn btn-secondary" onclick="loadDrives('all')">All Drives</button>
-                        <button class="btn btn-primary" onclick="loadDrives()">Refresh</button>
+                <div class="card-header">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h3 class="card-title mb-0">Drive Management</h3>
+                        <div class="btn-group">
+                            <button id="filter-pending" class="btn btn-primary btn-sm" onclick="loadDrives('pending')">
+                                <i class="fas fa-clock"></i> Pending
+                            </button>
+                            <button id="filter-approved" class="btn btn-outline-primary btn-sm" onclick="loadDrives('approved')">
+                                <i class="fas fa-check"></i> Approved
+                            </button>
+                            <button id="filter-rejected" class="btn btn-outline-primary btn-sm" onclick="loadDrives('rejected')">
+                                <i class="fas fa-times"></i> Rejected
+                            </button>
+                            <button id="filter-all" class="btn btn-outline-primary btn-sm" onclick="loadDrives('all')">
+                                <i class="fas fa-list"></i> All
+                            </button>
+                        </div>
                     </div>
                 </div>
                 <div class="table-responsive">
                     <table class="table">
                         <thead>
                             <tr>
-                                <th>ID</th>
+                                <th>#</th>
                                 <th>Title</th>
                                 <th>Company</th>
                                 <th>Type</th>
+                                <th>Targets</th>
+                                <th>Duration</th>
                                 <th>Status</th>
-                                <th>Approval</th>
-                                <th>Created Date</th>
+                                <th>Created</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody id="drives-table-body">
                             <tr>
-                                <td colspan="8" class="text-center">Loading...</td>
+                                <td colspan="9" class="text-center">Loading...</td>
                             </tr>
                         </tbody>
                     </table>
+                </div>
+            </div>
+
+            <!-- Pending Approvals Section -->
+            <div id="approvals-section" class="card" style="display: none;">
+                <div class="card-header">
+                    <h3 class="card-title">Pending Custom Approvals</h3>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="card-title mb-0">Custom Colleges</h5>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>Name</th>
+                                            <th>Used</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="pending-colleges-table-body">
+                                        <tr>
+                                            <td colspan="3" class="text-center">Loading...</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="card-title mb-0">Custom Student Groups</h5>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>Name</th>
+                                            <th>Used</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="pending-groups-table-body">
+                                        <tr>
+                                            <td colspan="3" class="text-center">Loading...</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 

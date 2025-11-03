@@ -133,6 +133,81 @@ def migrate_old_targeting_data(db):
         print(f"  ⚠️ Migration error: {e}")
         db.rollback()
 
+def migrate_company_status_fields():
+    """Add status, admin_notes, reviewed_at, reviewed_by fields to Company table"""
+    try:
+        print("    ⚙️ Adding company status tracking fields...")
+        
+        # Add new columns
+        with engine.connect() as connection:
+            trans = connection.begin()
+            try:
+                # Add status column
+                connection.execute(text("""
+                    ALTER TABLE companies 
+                    ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'pending'
+                """))
+                
+                # Add admin_notes column
+                connection.execute(text("""
+                    ALTER TABLE companies 
+                    ADD COLUMN IF NOT EXISTS admin_notes TEXT
+                """))
+                
+                # Add reviewed_at column
+                connection.execute(text("""
+                    ALTER TABLE companies 
+                    ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP
+                """))
+                
+                # Add reviewed_by column
+                connection.execute(text("""
+                    ALTER TABLE companies 
+                    ADD COLUMN IF NOT EXISTS reviewed_by VARCHAR(255)
+                """))
+                
+                # Migrate existing data
+                connection.execute(text("""
+                    UPDATE companies 
+                    SET status = CASE
+                        WHEN is_approved = true THEN 'approved'
+                        WHEN is_approved = false AND logo_url = 'REJECTED' THEN 'rejected'
+                        WHEN is_approved = false AND EXISTS(
+                            SELECT 1 FROM drives WHERE drives.company_id = companies.id
+                        ) THEN 'suspended'
+                        ELSE 'pending'
+                    END
+                    WHERE status IS NULL OR status = 'pending'
+                """))
+                
+                # Clear hacky logo_url field
+                connection.execute(text("""
+                    UPDATE companies 
+                    SET logo_url = NULL 
+                    WHERE logo_url = 'REJECTED'
+                """))
+                
+                trans.commit()
+                
+                # Show migration summary
+                result = connection.execute(text("""
+                    SELECT status, COUNT(*) as count 
+                    FROM companies 
+                    GROUP BY status 
+                    ORDER BY status
+                """))
+                
+                print("    ✓ Company status migration completed!")
+                for row in result:
+                    print(f"      - {row[0]}: {row[1]} companies")
+                        
+            except Exception as e:
+                trans.rollback()
+                raise e
+                
+    except Exception as e:
+        print(f"    ❌ Company status migration error: {e}")
+
 @app.on_event("startup")
 async def startup_event():
     """Create database tables, migrate old data, and initialize sample data on startup"""
@@ -162,6 +237,17 @@ async def startup_event():
             migrate_old_targeting_data(db)
         finally:
             db.close()
+    
+    # Check if company status migration is needed
+    needs_company_migration = False
+    if 'companies' in existing_tables:
+        columns = [col['name'] for col in inspector.get_columns('companies')]
+        needs_company_migration = 'status' not in columns
+    
+    # Run company status migration if needed
+    if needs_company_migration:
+        print("  ⚙️ Migrating company status fields...")
+        migrate_company_status_fields()
     
     # Initialize sample data
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

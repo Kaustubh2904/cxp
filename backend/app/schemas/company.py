@@ -8,6 +8,10 @@ class CompanyResponse(BaseModel):
     email: str
     logo_url: Optional[str] = None
     is_approved: bool
+    status: Optional[str] = "pending"
+    admin_notes: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
+    reviewed_by: Optional[str] = None
     created_at: datetime
 
     class Config:
@@ -15,6 +19,7 @@ class CompanyResponse(BaseModel):
 
 class CompanyApprovalUpdate(BaseModel):
     is_approved: bool
+    notes: Optional[str] = None
 
 class CollegeCreate(BaseModel):
     name: str

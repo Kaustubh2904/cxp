@@ -41,6 +41,7 @@ class DriveUpdate(BaseModel):
 class DriveResponse(BaseModel):
     id: int
     company_id: int
+    company_name: Optional[str] = None  # Company name for display
     title: str
     description: Optional[str] = None
     question_type: QuestionType

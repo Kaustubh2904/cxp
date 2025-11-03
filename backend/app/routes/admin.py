@@ -8,7 +8,7 @@ from app.schemas.drive import DriveResponse, AdminDriveApprovalUpdate
 from app.auth import get_admin_user
 
 def format_drive_response(drive, db):
-    """Format drive response with resolved target names"""
+    """Format drive response with resolved target names and company info"""
     targets = []
     for target in drive.targets:
         college_name = target.custom_college_name
@@ -32,9 +32,16 @@ def format_drive_response(drive, db):
             "batch_year": target.batch_year
         })
     
+    # Get company information
+    company_name = "Unknown Company"
+    if drive.company_id:
+        company = db.query(Company).filter(Company.id == drive.company_id).first()
+        company_name = company.name if company else "Unknown Company"
+    
     return {
         "id": drive.id,
         "company_id": drive.company_id,
+        "company_name": company_name,
         "title": drive.title,
         "description": drive.description,
         "question_type": drive.question_type,
@@ -54,11 +61,26 @@ router = APIRouter()
 def get_all_companies(
     skip: int = 0,
     limit: int = 100,
+    status_filter: str = "pending",  # pending, approved, suspended, rejected, all
     db: Session = Depends(get_db),
     admin: dict = Depends(get_admin_user)
 ):
     """Get all companies (admin only)"""
-    companies = db.query(Company).offset(skip).limit(limit).all()
+    from app.models import CompanyStatus
+    
+    query = db.query(Company)
+    
+    if status_filter == "pending":
+        query = query.filter(Company.status == CompanyStatus.PENDING.value)
+    elif status_filter == "approved":
+        query = query.filter(Company.status == CompanyStatus.APPROVED.value)
+    elif status_filter == "suspended":
+        query = query.filter(Company.status == CompanyStatus.SUSPENDED.value)
+    elif status_filter == "rejected":
+        query = query.filter(Company.status == CompanyStatus.REJECTED.value)
+    # "all" shows everything
+    
+    companies = query.offset(skip).limit(limit).all()
     return companies
 
 @router.put("/companies/{company_id}/approve", response_model=CompanyResponse)
@@ -68,16 +90,80 @@ def approve_company(
     db: Session = Depends(get_db),
     admin: dict = Depends(get_admin_user)
 ):
-    """Approve or reject company registration"""
+    """Approve company registration"""
+    from app.models import CompanyStatus
+    from datetime import datetime
+    
     company = db.query(Company).filter(Company.id == company_id).first()
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
     
-    company.is_approved = approval_data.is_approved
+    if approval_data.is_approved:
+        company.status = CompanyStatus.APPROVED.value
+        company.is_approved = True  # Keep for backward compatibility
+    else:
+        company.status = CompanyStatus.SUSPENDED.value
+        company.is_approved = False
+    
+    # Update review metadata
+    company.reviewed_at = datetime.utcnow()
+    company.reviewed_by = admin.username
+    company.admin_notes = getattr(approval_data, 'notes', None)
+    
     db.commit()
     db.refresh(company)
     
     return company
+
+@router.put("/companies/{company_id}/reject")
+def reject_company(
+    company_id: int,
+    rejection_data: dict,  # {"reason": "optional reason"}
+    db: Session = Depends(get_db),
+    admin: dict = Depends(get_admin_user)
+):
+    """Reject company registration (move to rejected status instead of deleting)"""
+    from app.models import CompanyStatus
+    from datetime import datetime
+    
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    # Mark as rejected with proper status
+    company.status = CompanyStatus.REJECTED.value
+    company.is_approved = False  # Keep for backward compatibility
+    company.admin_notes = rejection_data.get("reason", "Rejected by admin")
+    company.reviewed_at = datetime.utcnow()
+    company.reviewed_by = admin.username
+    
+    db.commit()
+    db.refresh(company)
+    
+    return {"message": "Company rejected successfully", "company_id": company_id}
+
+@router.delete("/companies/{company_id}")
+def delete_company(
+    company_id: int,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(get_admin_user)
+):
+    """Delete/reject company registration"""
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    # Check if company has any drives
+    if company.drives:
+        raise HTTPException(
+            status_code=400, 
+            detail="Cannot delete company with existing drives. Please handle drives first."
+        )
+    
+    db.delete(company)
+    db.commit()
+    
+    return {"message": "Company deleted successfully"}
 
 @router.get("/drives", response_model=List[DriveResponse])
 def get_all_drives(
@@ -136,13 +222,91 @@ def get_all_colleges(
     colleges = db.query(College).all()
     return colleges
 
+@router.get("/colleges/pending")
+def get_pending_custom_colleges(
+    db: Session = Depends(get_db),
+    admin: dict = Depends(get_admin_user)
+):
+    """Get custom colleges that need approval"""
+    from sqlalchemy import text
+    
+    # Get distinct custom college names that don't exist in College table
+    query = text("""
+        SELECT DISTINCT dt.custom_college_name as name,
+               COUNT(*) as usage_count,
+               MIN(d.created_at) as first_used
+        FROM drive_targets dt
+        JOIN drives d ON dt.drive_id = d.id
+        WHERE dt.custom_college_name IS NOT NULL
+        AND dt.custom_college_name NOT IN (
+            SELECT name FROM colleges WHERE is_approved = true
+        )
+        GROUP BY dt.custom_college_name
+        ORDER BY first_used ASC
+    """)
+    
+    result = db.execute(query)
+    pending_colleges = []
+    for row in result:
+        pending_colleges.append({
+            "name": row.name,
+            "usage_count": row.usage_count,
+            "first_used": row.first_used
+        })
+    
+    return pending_colleges
+
+@router.put("/colleges/approve-custom")
+def approve_custom_college(
+    college_data: dict,  # {"name": "MIT"}
+    db: Session = Depends(get_db),
+    admin: dict = Depends(get_admin_user)
+):
+    """Approve custom college and update all references"""
+    from app.models import DriveTarget
+    
+    custom_name = college_data.get("name")
+    if not custom_name:
+        raise HTTPException(status_code=400, detail="College name is required")
+    
+    # Check if this college already exists
+    existing_college = db.query(College).filter(College.name == custom_name).first()
+    if existing_college:
+        if existing_college.is_approved:
+            raise HTTPException(status_code=400, detail="College already approved")
+        # If exists but not approved, approve it
+        new_college = existing_college
+        new_college.is_approved = True
+    else:
+        # Create new approved college
+        new_college = College(name=custom_name, is_approved=True)
+        db.add(new_college)
+        db.flush()  # To get the ID
+    
+    # Update all DriveTargets that use this custom name to reference the approved college
+    custom_targets = db.query(DriveTarget).filter(
+        DriveTarget.custom_college_name == custom_name
+    ).all()
+    
+    for target in custom_targets:
+        target.college_id = new_college.id
+        target.custom_college_name = None  # Clear custom name
+    
+    db.commit()
+    
+    return {
+        "message": "College approved successfully", 
+        "college": {"id": new_college.id, "name": new_college.name},
+        "updated_targets": len(custom_targets)
+    }
+
 @router.put("/colleges/{college_id}/approve")
 def approve_college(
     college_id: int,
     db: Session = Depends(get_db),
     admin: dict = Depends(get_admin_user)
 ):
-    """Approve custom college"""
+    """Approve existing college"""
     college = db.query(College).filter(College.id == college_id).first()
     if not college:
         raise HTTPException(status_code=404, detail="College not found")
@@ -161,13 +325,91 @@ def get_all_student_groups(
     groups = db.query(StudentGroup).all()
     return groups
 
+@router.get("/student-groups/pending")
+def get_pending_custom_student_groups(
+    db: Session = Depends(get_db),
+    admin: dict = Depends(get_admin_user)
+):
+    """Get custom student groups that need approval"""
+    from sqlalchemy import text
+    
+    # Get distinct custom student group names that don't exist in StudentGroup table
+    query = text("""
+        SELECT DISTINCT dt.custom_student_group_name as name,
+               COUNT(*) as usage_count,
+               MIN(d.created_at) as first_used
+        FROM drive_targets dt
+        JOIN drives d ON dt.drive_id = d.id
+        WHERE dt.custom_student_group_name IS NOT NULL
+        AND dt.custom_student_group_name NOT IN (
+            SELECT name FROM student_groups WHERE is_approved = true
+        )
+        GROUP BY dt.custom_student_group_name
+        ORDER BY first_used ASC
+    """)
+    
+    result = db.execute(query)
+    pending_groups = []
+    for row in result:
+        pending_groups.append({
+            "name": row.name,
+            "usage_count": row.usage_count,
+            "first_used": row.first_used
+        })
+    
+    return pending_groups
+
+@router.put("/student-groups/approve-custom")
+def approve_custom_student_group(
+    group_data: dict,  # {"name": "aimlds"}
+    db: Session = Depends(get_db),
+    admin: dict = Depends(get_admin_user)
+):
+    """Approve custom student group and update all references"""
+    from app.models import DriveTarget
+    
+    custom_name = group_data.get("name")
+    if not custom_name:
+        raise HTTPException(status_code=400, detail="Group name is required")
+    
+    # Check if this group already exists
+    existing_group = db.query(StudentGroup).filter(StudentGroup.name == custom_name).first()
+    if existing_group:
+        if existing_group.is_approved:
+            raise HTTPException(status_code=400, detail="Student group already approved")
+        # If exists but not approved, approve it
+        new_group = existing_group
+        new_group.is_approved = True
+    else:
+        # Create new approved student group
+        new_group = StudentGroup(name=custom_name, is_approved=True)
+        db.add(new_group)
+        db.flush()  # To get the ID
+    
+    # Update all DriveTargets that use this custom name to reference the approved group
+    custom_targets = db.query(DriveTarget).filter(
+        DriveTarget.custom_student_group_name == custom_name
+    ).all()
+    
+    for target in custom_targets:
+        target.student_group_id = new_group.id
+        target.custom_student_group_name = None  # Clear custom name
+    
+    db.commit()
+    
+    return {
+        "message": "Student group approved successfully", 
+        "group": {"id": new_group.id, "name": new_group.name},
+        "updated_targets": len(custom_targets)
+    }
+
 @router.put("/student-groups/{group_id}/approve")
 def approve_student_group(
     group_id: int,
     db: Session = Depends(get_db),
     admin: dict = Depends(get_admin_user)
 ):
-    """Approve custom student group"""
+    """Approve existing student group"""
     group = db.query(StudentGroup).filter(StudentGroup.id == group_id).first()
     if not group:
         raise HTTPException(status_code=404, detail="Student group not found")

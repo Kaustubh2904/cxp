@@ -82,10 +82,23 @@ def company_login(company_data: CompanyLogin, db: Session = Depends(get_db)):
         )
     
     if not company.is_approved:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Company account not approved by admin"
-        )
+        # Provide more specific error messages based on status
+        status = getattr(company, 'status', 'pending')
+        if status == 'rejected':
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Company account has been rejected by admin. Please contact support."
+            )
+        elif status == 'suspended':
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Company account has been suspended. Please contact admin."
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Company account is pending admin approval"
+            )
     
     access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
     access_token = create_access_token(

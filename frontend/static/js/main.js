@@ -72,14 +72,27 @@ class ApiService {
     }
     
     // Admin APIs
-    static async getCompanies() {
-        return this.request('/admin/companies');
+    static async getCompanies(filter = 'pending') {
+        return this.request(`/admin/companies?status_filter=${filter}`);
     }
     
     static async approveCompany(companyId, isApproved) {
         return this.request(`/admin/companies/${companyId}/approve`, {
             method: 'PUT',
             body: JSON.stringify({ is_approved: isApproved })
+        });
+    }
+    
+    static async rejectCompany(companyId, reason = null) {
+        return this.request(`/admin/companies/${companyId}/reject`, {
+            method: 'PUT',
+            body: JSON.stringify({ reason })
+        });
+    }
+    
+    static async deleteCompany(companyId) {
+        return this.request(`/admin/companies/${companyId}`, {
+            method: 'DELETE'
         });
     }
     
@@ -204,6 +217,29 @@ class ApiService {
     static async deleteStudentGroup(groupId) {
         return this.request(`/admin/student-groups/${groupId}`, {
             method: 'DELETE'
+        });
+    }
+    
+    // Pending custom approvals
+    static async getPendingCustomColleges() {
+        return this.request('/admin/colleges/pending');
+    }
+    
+    static async getPendingCustomStudentGroups() {
+        return this.request('/admin/student-groups/pending');
+    }
+    
+    static async approveCustomCollege(name) {
+        return this.request('/admin/colleges/approve-custom', {
+            method: 'PUT',
+            body: JSON.stringify({ name })
+        });
+    }
+    
+    static async approveCustomStudentGroup(name) {
+        return this.request('/admin/student-groups/approve-custom', {
+            method: 'PUT',
+            body: JSON.stringify({ name })
         });
     }
 }
