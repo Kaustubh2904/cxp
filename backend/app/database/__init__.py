@@ -1,5 +1,5 @@
 from app.database.connection import Base, engine
-from app.models import Admin, Company, Drive, Question, College, StudentGroup
+from app.models import Admin, Company, Drive, Question, College, StudentGroup, Student
 
 def create_tables():
     """Create all database tables"""
