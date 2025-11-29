@@ -9,16 +9,18 @@ class Question(Base):
     __tablename__ = "questions"
     
     id = Column(Integer, primary_key=True, index=True)
-    drive_id = Column(Integer, ForeignKey("drives.id"), nullable=False)
+    drive_id = Column(Integer, ForeignKey("drives.id", ondelete="CASCADE"), nullable=False)
     question_text = Column(Text, nullable=False)
-    option_a = Column(Text, nullable=True)
-    option_b = Column(Text, nullable=True)
-    option_c = Column(Text, nullable=True)
-    option_d = Column(Text, nullable=True)
-    correct_answer = Column(String, nullable=True)  # For MCQ questions
-    difficulty = Column(String, nullable=True)  # easy, medium, hard
-    points = Column(Integer, default=1)
+    option_a = Column(String, nullable=False)
+    option_b = Column(String, nullable=False)
+    option_c = Column(String, nullable=False)
+    option_d = Column(String, nullable=False)
+    correct_answer = Column(String, nullable=False)  # Should match one of the options
+    points = Column(Integer, nullable=False, default=1)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # Relationships
     drive = relationship("Drive", back_populates="questions")
+    
+    def __repr__(self):
+        return f"<Question(id={self.id}, question='{self.question_text[:50]}...')>"

@@ -1,5 +1,4 @@
 # Import all models to make them available when importing from app.models
-from app.models.enums import DriveStatus, QuestionType, CompanyStatus
 from app.models.admin import Admin
 from app.models.company import Company
 from app.models.college import College
@@ -11,9 +10,6 @@ from app.models.student import Student
 
 # Export all models
 __all__ = [
-    "DriveStatus",
-    "QuestionType", 
-    "CompanyStatus",
     "Admin",
     "Company",
     "College",

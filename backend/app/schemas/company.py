@@ -4,7 +4,8 @@ from datetime import datetime
 
 class CompanyResponse(BaseModel):
     id: int
-    name: str
+    company_name: str  # Changed from 'name' to 'company_name'
+    username: str  # Added username field
     email: str
     logo_url: Optional[str] = None
     is_approved: bool
@@ -13,6 +14,7 @@ class CompanyResponse(BaseModel):
     reviewed_at: Optional[datetime] = None
     reviewed_by: Optional[str] = None
     created_at: datetime
+    updated_at: Optional[datetime] = None  # Added missing updated_at field
 
     class Config:
         from_attributes = True

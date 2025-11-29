@@ -1,3 +1,32 @@
+# Company Exam Portal - Production .gitignore
+
+# Security & Environment
+.env
+.env.local
+.env.production
+*.key
+*.pem
+config/secrets.json
+
+# Database
+*.sqlite
+*.sqlite3
+*.db
+backups/
+
+# Logs
+*.log
+logs/
+app.log
+error.log
+access.log
+
+# Production builds
+dist/
+build/
+*.min.js
+*.min.css
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

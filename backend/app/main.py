@@ -1,73 +1,83 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+import logging
+import sys
+from contextlib import asynccontextmanager
+from datetime import datetime
 from app.routes import auth_router, admin_router, company_router
 from app.database import create_tables
-from app.database.migrations import migrate_old_targeting_data, migrate_company_status_fields, initialize_sample_data
-from app.database.connection import engine
-from app.models import *  # Import all models for migrations and sample data
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy import inspect
+from app.database.config import settings
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler("app.log") if settings.environment != "development" else logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    logger.info("🚀 Starting Company Exam Portal API...")
+    logger.info("📊 Initializing database...")
+    
+    try:
+        create_tables()
+        logger.info("✅ Database initialized successfully!")
+    except Exception as e:
+        logger.error(f"❌ Database initialization failed: {str(e)}")
+        raise
+    
+    yield
+    
+    # Shutdown
+    logger.info("🛑 Shutting down Company Exam Portal API...")
 
 # Create FastAPI app
 app = FastAPI(
     title="Company Exam Portal API",
     description="Backend API for Company Exam Portal - Admin and Company Management System",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
-# Add CORS middleware - Allow frontend from any port (Live Server, etc.)
+# Configure CORS based on environment
+allowed_origins = settings.allowed_origins.split(",") if hasattr(settings, 'allowed_origins') and settings.allowed_origins else ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow any origin for development
+    allow_origins=allowed_origins if settings.environment == "production" else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Global exception handler
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled exception: {str(exc)}", exc_info=True)
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"detail": "Internal server error" if settings.environment == "production" else str(exc)}
+    )
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    logger.warning(f"HTTP exception: {exc.status_code} - {exc.detail}")
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail}
+    )
+
 # Include API routes
 app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(admin_router, prefix="/api/admin", tags=["Admin"])
 app.include_router(company_router, prefix="/api/company", tags=["Company"])
-
-@app.on_event("startup")
-async def startup_event():
-    """Create database tables, migrate old data, and initialize sample data on startup"""
-    print("🚀 Starting Company Exam Portal...")
-    print("📊 Initializing database...")
-    
-    # Create inspector to check existing schema
-    inspector = inspect(engine)
-    existing_tables = inspector.get_table_names()
-    
-    # Create all tables
-    print("  ✓ Creating/updating database tables...")
-    create_tables()
-    
-    # Check and run migrations
-    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    db = SessionLocal()
-    
-    try:
-        # Check if targeting data migration is needed
-        if 'drives' in existing_tables:
-            columns = [col['name'] for col in inspector.get_columns('drives')]
-            if 'target_colleges' in columns:
-                print("  ⚙️ Migrating old targeting data...")
-                migrate_old_targeting_data(db)
-        
-        # Check if company status migration is needed
-        if 'companies' in existing_tables:
-            columns = [col['name'] for col in inspector.get_columns('companies')]
-            if 'status' not in columns:
-                print("  ⚙️ Migrating company status fields...")
-                migrate_company_status_fields()
-        
-        # Initialize sample data
-        print("  ⚙️ Initializing sample data...")
-        initialize_sample_data(db)
-        
-    finally:
-        db.close()
 
 @app.get("/")
 async def root():
@@ -75,14 +85,44 @@ async def root():
     return {
         "message": "Company Exam Portal API",
         "version": "1.0.0",
+        "environment": settings.environment,
         "docs": "/docs",
         "redoc": "/redoc"
     }
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
-    return {"status": "healthy", "message": "API is running"}
+    """Health check endpoint for production monitoring"""
+    try:
+        # Test database connection
+        from app.database.connection import engine
+        from sqlalchemy import text
+        
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        
+        return {
+            "status": "healthy", 
+            "message": "API is running",
+            "version": "1.0.0",
+            "environment": settings.environment,
+            "database": "connected",
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}")
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "status": "unhealthy",
+                "message": "Database connection failed",
+                "version": "1.0.0",
+                "environment": settings.environment,
+                "database": "disconnected",
+                "timestamp": datetime.now().isoformat(),
+                "error": str(e) if settings.debug else "Database unavailable"
+            }
+        )
 
 if __name__ == "__main__":
     import uvicorn

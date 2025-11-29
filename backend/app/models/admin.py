@@ -1,10 +1,9 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey, Enum
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey
 from sqlalchemy.orm import relationship
 from datetime import datetime
 
 # Import base from database connection to use the same instance
 from app.database.connection import Base
-from app.models.enums import DriveStatus, QuestionType
 
 class Admin(Base):
     __tablename__ = "admins"

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from datetime import datetime
 
@@ -9,14 +9,16 @@ class Student(Base):
     __tablename__ = "students"
     
     id = Column(Integer, primary_key=True, index=True)
+    drive_id = Column(Integer, ForeignKey("drives.id", ondelete="CASCADE"), nullable=False)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
     roll_number = Column(String, nullable=False, index=True)
-    name = Column(String, nullable=True)
     email = Column(String, nullable=False, index=True)
-    drive_id = Column(Integer, ForeignKey("drives.id"), nullable=True)
-    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
-    is_approved = Column(Boolean, default=False)
+    name = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # Relationships
     drive = relationship("Drive", back_populates="students")
     company = relationship("Company", back_populates="students")
+    
+    def __repr__(self):
+        return f"<Student(roll_number='{self.roll_number}', email='{self.email}')>"

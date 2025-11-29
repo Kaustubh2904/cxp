@@ -54,14 +54,22 @@ def company_register(company_data: CompanyRegister, db: Session = Depends(get_db
             detail="Email already registered"
         )
     
+    # Check if username already exists
+    existing_username = db.query(Company).filter(Company.username == company_data.username).first()
+    if existing_username:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username already taken"
+        )
+    
     # Create new company
     hashed_password = get_password_hash(company_data.password)
     company = Company(
-        name=company_data.name,
+        company_name=company_data.company_name,
+        username=company_data.username,
         email=company_data.email,
-        password_hash=hashed_password,
-        logo_url=company_data.logo_url,
-        is_approved=False
+        hashed_password=hashed_password,
+        logo_url=company_data.logo_url
     )
     
     db.add(company)
@@ -73,23 +81,23 @@ def company_register(company_data: CompanyRegister, db: Session = Depends(get_db
 @router.post("/company/login", response_model=Token)
 def company_login(company_data: CompanyLogin, db: Session = Depends(get_db)):
     """Company login"""
-    company = db.query(Company).filter(Company.email == company_data.email).first()
+    company = db.query(Company).filter(Company.username == company_data.username).first()
     
-    if not company or not verify_password(company_data.password, company.password_hash):
+    if not company or not verify_password(company_data.password, company.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials"
         )
     
     if not company.is_approved:
-        # Provide more specific error messages based on status
-        status = getattr(company, 'status', 'pending')
-        if status == 'rejected':
+        # Provide more specific error messages based on company status
+        company_status = getattr(company, 'status', 'pending')
+        if company_status == 'rejected':
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Company account has been rejected by admin. Please contact support."
             )
-        elif status == 'suspended':
+        elif company_status == 'suspended':
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Company account has been suspended. Please contact admin."

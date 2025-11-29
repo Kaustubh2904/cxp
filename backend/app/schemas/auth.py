@@ -7,13 +7,14 @@ class AdminLogin(BaseModel):
     password: str
 
 class CompanyRegister(BaseModel):
-    name: str
+    company_name: str
+    username: str
     email: EmailStr
     password: str
     logo_url: Optional[str] = None
 
 class CompanyLogin(BaseModel):
-    email: EmailStr
+    username: str
     password: str
 
 class Token(BaseModel):

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 from app.database.connection import get_db
-from app.models import Company, Drive, College, StudentGroup, DriveStatus
+from app.models import Company, Drive, College, StudentGroup
 from app.schemas.company import CompanyResponse, CompanyApprovalUpdate, CollegeResponse, StudentGroupResponse
 from app.schemas.drive import DriveResponse, AdminDriveApprovalUpdate
 from app.auth import get_admin_user
@@ -66,18 +66,16 @@ def get_all_companies(
     admin: dict = Depends(get_admin_user)
 ):
     """Get all companies (admin only)"""
-    from app.models import CompanyStatus
-    
     query = db.query(Company)
     
     if status_filter == "pending":
-        query = query.filter(Company.status == CompanyStatus.PENDING.value)
+        query = query.filter(Company.status == "pending")
     elif status_filter == "approved":
-        query = query.filter(Company.status == CompanyStatus.APPROVED.value)
+        query = query.filter(Company.status == "approved") 
     elif status_filter == "suspended":
-        query = query.filter(Company.status == CompanyStatus.SUSPENDED.value)
+        query = query.filter(Company.status == "suspended")
     elif status_filter == "rejected":
-        query = query.filter(Company.status == CompanyStatus.REJECTED.value)
+        query = query.filter(Company.status == "rejected")
     # "all" shows everything
     
     companies = query.offset(skip).limit(limit).all()
@@ -91,7 +89,6 @@ def approve_company(
     admin: dict = Depends(get_admin_user)
 ):
     """Approve company registration"""
-    from app.models import CompanyStatus
     from datetime import datetime
     
     company = db.query(Company).filter(Company.id == company_id).first()
@@ -99,10 +96,10 @@ def approve_company(
         raise HTTPException(status_code=404, detail="Company not found")
     
     if approval_data.is_approved:
-        company.status = CompanyStatus.APPROVED.value
+        company.status = "approved"
         company.is_approved = True  # Keep for backward compatibility
     else:
-        company.status = CompanyStatus.SUSPENDED.value
+        company.status = "suspended"
         company.is_approved = False
     
     # Update review metadata
@@ -123,7 +120,6 @@ def reject_company(
     admin: dict = Depends(get_admin_user)
 ):
     """Reject company registration (move to rejected status instead of deleting)"""
-    from app.models import CompanyStatus
     from datetime import datetime
     
     company = db.query(Company).filter(Company.id == company_id).first()
@@ -131,7 +127,7 @@ def reject_company(
         raise HTTPException(status_code=404, detail="Company not found")
     
     # Mark as rejected with proper status
-    company.status = CompanyStatus.REJECTED.value
+    company.status = "rejected"
     company.is_approved = False  # Keep for backward compatibility
     company.admin_notes = rejection_data.get("reason", "Rejected by admin")
     company.reviewed_at = datetime.utcnow()
@@ -178,11 +174,11 @@ def get_all_drives(
     
     if status_filter == "pending":
         # Show only drives that need approval
-        query = query.filter(Drive.is_approved == False, Drive.status == DriveStatus.SUBMITTED)
+        query = query.filter(Drive.is_approved == False, Drive.status == "submitted")
     elif status_filter == "approved":
         query = query.filter(Drive.is_approved == True)
     elif status_filter == "rejected":
-        query = query.filter(Drive.status == DriveStatus.REJECTED)
+        query = query.filter(Drive.status == "rejected")
     # "all" shows everything
     
     drives = query.offset(skip).limit(limit).all()
@@ -204,14 +200,87 @@ def approve_drive(
     drive.admin_notes = approval_data.admin_notes
     
     if approval_data.is_approved:
-        drive.status = DriveStatus.APPROVED
+        drive.status = "approved"
     else:
-        drive.status = DriveStatus.REJECTED
+        drive.status = "rejected"
     
     db.commit()
     db.refresh(drive)
     
     return format_drive_response(drive, db)
+
+@router.get("/drives/{drive_id}/detail")
+def get_drive_detail(
+    drive_id: int,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(get_admin_user)
+):
+    """Get detailed view of a drive including questions and students for admin review"""
+    from app.models import Question, Student
+    
+    drive = db.query(Drive).filter(Drive.id == drive_id).first()
+    if not drive:
+        raise HTTPException(status_code=404, detail="Drive not found")
+    
+    # Get basic drive info
+    drive_info = format_drive_response(drive, db)
+    
+    # Get questions
+    questions = db.query(Question).filter(Question.drive_id == drive_id).all()
+    questions_data = []
+    for q in questions:
+        questions_data.append({
+            "id": q.id,
+            "question_text": q.question_text,
+            "option_a": q.option_a,
+            "option_b": q.option_b,
+            "option_c": q.option_c,
+            "option_d": q.option_d,
+            "correct_answer": q.correct_answer,
+            "points": q.points,
+            "created_at": q.created_at
+        })
+    
+    # Get students
+    students = db.query(Student).filter(Student.drive_id == drive_id).all()
+    students_data = []
+    for s in students:
+        students_data.append({
+            "id": s.id,
+            "roll_number": s.roll_number,
+            "email": s.email,
+            "name": s.name,
+            "created_at": s.created_at
+        })
+    
+    # Get company info
+    company_info = None
+    if drive.company_id:
+        company = db.query(Company).filter(Company.id == drive.company_id).first()
+        if company:
+            company_info = {
+                "id": company.id,
+                "name": company.name,
+                "company_name": company.company_name,
+                "email": company.email,
+                "phone": company.phone,
+                "website": company.website,
+                "description": company.description,
+                "status": company.status,
+                "created_at": company.created_at
+            }
+    
+    return {
+        "drive": drive_info,
+        "company": company_info,
+        "questions": questions_data,
+        "students": students_data,
+        "stats": {
+            "total_questions": len(questions_data),
+            "total_students": len(students_data),
+            "total_points": sum(q["points"] for q in questions_data)
+        }
+    }
 
 @router.get("/colleges", response_model=List[CollegeResponse])
 def get_all_colleges(

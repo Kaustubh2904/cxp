@@ -1,7 +1,6 @@
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
-from app.models import DriveStatus, QuestionType
 
 class DriveTargetCreate(BaseModel):
     college_id: Optional[int] = None  # From master college list
@@ -26,7 +25,7 @@ class DriveTargetResponse(BaseModel):
 class DriveCreate(BaseModel):
     title: str
     description: Optional[str] = None
-    question_type: QuestionType
+    question_type: str  # mcqs, aptitude, coding, technical, hr
     targets: List[DriveTargetCreate]  # List of targeting configurations
     duration_minutes: int
     scheduled_start: Optional[datetime] = None
@@ -44,11 +43,11 @@ class DriveResponse(BaseModel):
     company_name: Optional[str] = None  # Company name for display
     title: str
     description: Optional[str] = None
-    question_type: QuestionType
+    question_type: str  # mcqs, aptitude, coding, technical, hr
     targets: List[DriveTargetResponse] = []
     duration_minutes: int
     scheduled_start: Optional[datetime] = None
-    status: DriveStatus
+    status: str  # draft, submitted, approved, rejected, upcoming, live, ongoing, completed
     is_approved: bool
     admin_notes: Optional[str] = None
     created_at: datetime
@@ -58,7 +57,7 @@ class DriveResponse(BaseModel):
         from_attributes = True
 
 class DriveStatusUpdate(BaseModel):
-    status: DriveStatus
+    status: str  # draft, submitted, approved, rejected, upcoming, live, ongoing, completed
 
 class AdminDriveApprovalUpdate(BaseModel):
     is_approved: bool
