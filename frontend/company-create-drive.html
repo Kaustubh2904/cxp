@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Drive - Company Exam Portal</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-brand">
+                <h2>🏢 Company Dashboard</h2>
+            </div>
+            <div class="nav-links">
+                <a href="company-dashboard.html" class="nav-link">Drives</a>
+                <button onclick="logout()" class="btn btn-secondary" style="padding: 0.5rem 1rem;">Logout</button>
+            </div>
+        </div>
+    </nav>
+
+    <main class="dashboard">
+        <div class="container">
+            <h1 class="mb-4" id="pageTitle">Create New Drive</h1>
+
+            <div class="form-container" style="max-width: 800px;">
+                <form id="driveForm">
+                    <div class="form-group">
+                        <label for="title">Drive Title *</label>
+                        <input type="text" id="title" class="form-control" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="description">Description</label>
+                        <textarea id="description" class="form-control"></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="question_type">Question Type *</label>
+                        <select id="question_type" class="form-control" required>
+                            <option value="">Select type...</option>
+                            <option value="mcqs">Multiple Choice Questions</option>
+                            <option value="aptitude">Aptitude</option>
+                            <option value="technical">Technical</option>
+                            <option value="coding">Coding</option>
+                            <option value="hr">HR Round</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="duration_minutes">Duration (minutes) *</label>
+                        <input type="number" id="duration_minutes" class="form-control" min="1" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="scheduled_start">Scheduled Start (Optional)</label>
+                        <input type="datetime-local" id="scheduled_start" class="form-control">
+                    </div>
+
+                    <h3 class="mb-3">Target Students</h3>
+                    
+                    <div id="targetsContainer">
+                        <div class="target-group mb-3" style="padding: 1rem; background: var(--bg-color); border-radius: 8px;">
+                            <div class="form-group">
+                                <label>College</label>
+                                <select class="form-control target-college">
+                                    <option value="">Select or enter custom...</option>
+                                </select>
+                                <input type="text" class="form-control mt-2 target-custom-college" placeholder="Or enter custom college name">
+                            </div>
+
+                            <div class="form-group">
+                                <label>Student Group</label>
+                                <select class="form-control target-group-select">
+                                    <option value="">Select or enter custom...</option>
+                                </select>
+                                <input type="text" class="form-control mt-2 target-custom-group" placeholder="Or enter custom group name">
+                            </div>
+
+                            <div class="form-group">
+                                <label>Batch Year (Optional)</label>
+                                <input type="text" class="form-control target-batch" placeholder="e.g., 2025">
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="button" class="btn btn-secondary mb-3" onclick="addTarget()">+ Add Another Target</button>
+
+                    <div class="btn-group">
+                        <button type="submit" class="btn btn-primary">Create Drive</button>
+                        <button type="button" class="btn btn-secondary" onclick="history.back()">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </main>
+
+    <script src="js/config.js"></script>
+    <script>
+        requireAuth('company');
+
+        let colleges = [];
+        let studentGroups = [];
+        let editMode = false;
+        let driveId = null;
+
+        // Check if we're in edit mode
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has('id')) {
+            editMode = true;
+            driveId = parseInt(urlParams.get('id'));
+            document.getElementById('pageTitle').textContent = 'Edit Drive';
+        }
+
+        async function loadReferenceData() {
+            try {
+                [colleges, studentGroups] = await Promise.all([
+                    API.request(API_CONFIG.ENDPOINTS.COMPANY_COLLEGES),
+                    API.request(API_CONFIG.ENDPOINTS.COMPANY_STUDENT_GROUPS)
+                ]);
+
+                updateTargetSelects();
+            } catch (error) {
+                showAlert('Failed to load colleges and groups', 'error');
+            }
+        }
+
+        function updateTargetSelects() {
+            const collegeSelects = document.querySelectorAll('.target-college');
+            const groupSelects = document.querySelectorAll('.target-group-select');
+
+            collegeSelects.forEach(select => {
+                let html = '<option value="">Select or enter custom...</option>';
+                colleges.forEach(college => {
+                    html += `<option value="${college.id}">${college.name}</option>`;
+                });
+                select.innerHTML = html;
+            });
+
+            groupSelects.forEach(select => {
+                let html = '<option value="">Select or enter custom...</option>';
+                studentGroups.forEach(group => {
+                    html += `<option value="${group.id}">${group.name}</option>`;
+                });
+                select.innerHTML = html;
+            });
+        }
+
+        function addTarget() {
+            const container = document.getElementById('targetsContainer');
+            const newTarget = document.querySelector('.target-group').cloneNode(true);
+            
+            // Clear values
+            newTarget.querySelectorAll('input, select').forEach(el => el.value = '');
+            
+            container.appendChild(newTarget);
+            updateTargetSelects();
+        }
+
+        async function loadDriveData() {
+            if (!editMode || !driveId) return;
+
+            try {
+                const drive = await API.request(API_CONFIG.ENDPOINTS.COMPANY_DRIVE_DETAIL(driveId));
+
+                // Populate form fields
+                document.getElementById('title').value = drive.title || '';
+                document.getElementById('description').value = drive.description || '';
+                document.getElementById('question_type').value = drive.question_type || '';
+                document.getElementById('duration_minutes').value = drive.duration_minutes || '';
+                
+                if (drive.scheduled_start) {
+                    // Convert to local datetime format
+                    const date = new Date(drive.scheduled_start);
+                    const localDateTime = new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+                    document.getElementById('scheduled_start').value = localDateTime;
+                }
+
+                // Load targets
+                if (drive.targets && drive.targets.length > 0) {
+                    const container = document.getElementById('targetsContainer');
+                    container.innerHTML = ''; // Clear existing
+
+                    drive.targets.forEach((target, index) => {
+                        if (index === 0) {
+                            // Use the first target group that already exists
+                            const firstGroup = document.createElement('div');
+                            firstGroup.className = 'target-group mb-3';
+                            firstGroup.style.cssText = 'padding: 1rem; background: var(--bg-color); border-radius: 8px;';
+                            firstGroup.innerHTML = `
+                                <div class="form-group">
+                                    <label>College</label>
+                                    <select class="form-control target-college">
+                                        <option value="">Select or enter custom...</option>
+                                    </select>
+                                    <input type="text" class="form-control mt-2 target-custom-college" placeholder="Or enter custom college name">
+                                </div>
+                                <div class="form-group">
+                                    <label>Student Group</label>
+                                    <select class="form-control target-group-select">
+                                        <option value="">Select or enter custom...</option>
+                                    </select>
+                                    <input type="text" class="form-control mt-2 target-custom-group" placeholder="Or enter custom group name">
+                                </div>
+                                <div class="form-group">
+                                    <label>Batch Year (Optional)</label>
+                                    <input type="text" class="form-control target-batch" placeholder="e.g., 2025">
+                                </div>
+                            `;
+                            container.appendChild(firstGroup);
+                        } else {
+                            addTarget();
+                        }
+                    });
+
+                    // Populate target values
+                    const targetGroups = document.querySelectorAll('.target-group');
+                    drive.targets.forEach((target, index) => {
+                        if (targetGroups[index]) {
+                            const group = targetGroups[index];
+                            
+                            if (target.college_id) {
+                                group.querySelector('.target-college').value = target.college_id;
+                            }
+                            if (target.custom_college_name) {
+                                group.querySelector('.target-custom-college').value = target.custom_college_name;
+                            }
+                            if (target.student_group_id) {
+                                group.querySelector('.target-group-select').value = target.student_group_id;
+                            }
+                            if (target.custom_student_group_name) {
+                                group.querySelector('.target-custom-group').value = target.custom_student_group_name;
+                            }
+                            if (target.batch_year) {
+                                group.querySelector('.target-batch').value = target.batch_year;
+                            }
+                        }
+                    });
+                }
+
+                // Update submit button text
+                document.querySelector('button[type="submit"]').textContent = 'Update Drive';
+            } catch (error) {
+                showAlert('Failed to load drive data: ' + error.message, 'error');
+            }
+        }
+
+        document.getElementById('driveForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            submitBtn.disabled = true;
+            const originalText = submitBtn.textContent;
+            submitBtn.textContent = editMode ? 'Updating...' : 'Creating...';
+
+            try {
+                // Collect targets
+                const targetGroups = document.querySelectorAll('.target-group');
+                const targets = [];
+
+                targetGroups.forEach(group => {
+                    const collegeId = group.querySelector('.target-college').value;
+                    const customCollege = group.querySelector('.target-custom-college').value;
+                    const groupId = group.querySelector('.target-group-select').value;
+                    const customGroup = group.querySelector('.target-custom-group').value;
+                    const batchYear = group.querySelector('.target-batch').value;
+
+                    targets.push({
+                        college_id: collegeId ? parseInt(collegeId) : null,
+                        custom_college_name: customCollege || null,
+                        student_group_id: groupId ? parseInt(groupId) : null,
+                        custom_student_group_name: customGroup || null,
+                        batch_year: batchYear || null
+                    });
+                });
+
+                const driveData = {
+                    title: document.getElementById('title').value,
+                    description: document.getElementById('description').value || null,
+                    question_type: document.getElementById('question_type').value,
+                    duration_minutes: parseInt(document.getElementById('duration_minutes').value),
+                    scheduled_start: document.getElementById('scheduled_start').value || null,
+                    targets: targets
+                };
+
+                let response;
+                if (editMode) {
+                    // Update existing drive
+                    response = await API.request(API_CONFIG.ENDPOINTS.COMPANY_UPDATE_DRIVE(driveId), {
+                        method: 'PUT',
+                        body: JSON.stringify(driveData)
+                    });
+                    showAlert('Drive updated successfully!', 'success');
+                } else {
+                    // Create new drive
+                    response = await API.request(API_CONFIG.ENDPOINTS.COMPANY_CREATE_DRIVE, {
+                        method: 'POST',
+                        body: JSON.stringify(driveData)
+                    });
+                    showAlert('Drive created successfully!', 'success');
+                }
+
+                setTimeout(() => {
+                    window.location.href = `company-drive-detail.html?id=${response.id || driveId}`;
+                }, 1000);
+            } catch (error) {
+                showAlert(error.message, 'error');
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalText;
+            }
+        });
+
+        // Load reference data first, then load drive data if editing
+        loadReferenceData().then(() => {
+            if (editMode) {
+                loadDriveData();
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Header
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 import csv
 import io
 import smtplib
@@ -18,10 +18,37 @@ from app.schemas.email import (
     EmailTemplatePreviewResponse, EmailSendResponse, EmailStatusResponse
 )
 from app.schemas.company import CollegeResponse, StudentGroupResponse
-from app.auth import get_company_user
+from app.auth import get_company_user, get_company_or_admin_user
 from app.utils.email_processor import EmailTemplateProcessor, TEMPLATE_VARIABLES
 
 router = APIRouter()
+
+def get_effective_company_id(
+    current_user: dict = Depends(get_company_or_admin_user),
+    x_company_id: Optional[int] = Header(None, alias="X-Company-ID")
+) -> int:
+    """
+    Get the effective company ID to use for the request.
+    - If user is admin and X-Company-ID header is provided, use that
+    - If user is company, use their own company ID (ignore header)
+    - If user is admin and no header provided, raise error
+    """
+    if current_user["user_type"] == "company":
+        # Company users can only access their own data
+        return current_user["user"].id
+    elif current_user["user_type"] == "admin":
+        # Admin can access any company's data if company ID is provided
+        if x_company_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Admin must provide X-Company-ID header"
+            )
+        return x_company_id
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied"
+        )
 
 def format_drive_response(drive: Drive, db: Session):
     """Format drive response with resolved target information"""
@@ -74,14 +101,22 @@ def get_company_drives(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
-    company: dict = Depends(get_company_user)
+    company_id: int = Depends(get_effective_company_id)
 ):
-    """Get all drives for the authenticated company"""
+    """Get all drives for the authenticated company or admin viewing a specific company"""
     drives = db.query(Drive).filter(
-        Drive.company_id == company.id  # Show all drives so company can see status
+        Drive.company_id == company_id  # Show all drives so company can see status
     ).offset(skip).limit(limit).all()
     
-    return [format_drive_response(drive, db) for drive in drives]
+    # Add counts for each drive
+    result = []
+    for drive in drives:
+        drive_dict = format_drive_response(drive, db)
+        drive_dict["question_count"] = db.query(Question).filter(Question.drive_id == drive.id).count()
+        drive_dict["student_count"] = db.query(Student).filter(Student.drive_id == drive.id).count()
+        result.append(drive_dict)
+    
+    return result
 
 @router.post("/drives", response_model=DriveResponse)
 def create_drive(
@@ -531,12 +566,12 @@ def upload_students_csv(
 def get_drive_students(
     drive_id: int,
     db: Session = Depends(get_db),
-    company: dict = Depends(get_company_user)
+    company_id: int = Depends(get_effective_company_id)
 ):
-    """Get all students for a drive"""
+    """Get all students for a drive (accessible by company owner or admin)"""
     drive = db.query(Drive).filter(
         Drive.id == drive_id,
-        Drive.company_id == company.id
+        Drive.company_id == company_id
     ).first()
     
     if not drive:

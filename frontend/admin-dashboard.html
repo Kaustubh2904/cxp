@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - Company Exam Portal</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-brand">
+                <h2>🎯 Admin Dashboard</h2>
+            </div>
+            <div class="nav-links">
+                <a href="admin-dashboard.html" class="nav-link active">Companies</a>
+                <a href="admin-drives.html" class="nav-link">Drives</a>
+                <a href="admin-colleges.html" class="nav-link">Colleges</a>
+                <button onclick="logout()" class="btn btn-secondary" style="padding: 0.5rem 1rem;">Logout</button>
+            </div>
+        </div>
+    </nav>
+
+    <main class="dashboard">
+        <div class="container">
+            <div class="dashboard-header">
+                <h1>Company Management</h1>
+                <div>
+                    <select id="statusFilter" class="form-control" style="width: auto; display: inline-block; margin-right: 1rem;">
+                        <option value="pending">Pending</option>
+                        <option value="approved">Approved</option>
+                        <option value="rejected">Rejected</option>
+                        <option value="suspended">Suspended</option>
+                        <option value="all">All</option>
+                    </select>
+                    <button onclick="loadCompanies()" class="btn btn-primary" style="padding: 0.5rem 1rem;">
+                        🔄 Refresh
+                    </button>
+                </div>
+            </div>
+
+            <div id="companiesTable"></div>
+        </div>
+    </main>
+
+    <!-- Modal for drives and students -->
+    <div id="drivesModal" class="modal">
+        <div class="modal-content" style="max-width: 1000px;">
+            <div class="modal-header">
+                <h3 id="drivesModalTitle">Company Drives</h3>
+                <button class="modal-close" onclick="closeDrivesModal()">&times;</button>
+            </div>
+            <div id="drivesModalBody"></div>
+        </div>
+    </div>
+
+    <!-- Modal for students -->
+    <div id="studentsModal" class="modal">
+        <div class="modal-content" style="max-width: 1200px;">
+            <div class="modal-header">
+                <h3 id="studentsModalTitle">Drive Students</h3>
+                <button class="modal-close" onclick="closeStudentsModal()">&times;</button>
+            </div>
+            <div id="studentsModalBody"></div>
+        </div>
+    </div>
+
+    <script src="js/config.js"></script>
+    <script>
+        requireAuth('admin');
+
+        let companies = [];
+
+        async function loadCompanies() {
+            const filter = document.getElementById('statusFilter').value;
+            const tableDiv = document.getElementById('companiesTable');
+            tableDiv.innerHTML = '<div class="spinner"></div>';
+
+            try {
+                companies = await API.request(`${API_CONFIG.ENDPOINTS.ADMIN_COMPANIES}?status_filter=${filter}`);
+                renderCompaniesTable();
+            } catch (error) {
+                tableDiv.innerHTML = `<div class="alert alert-error">${error.message}</div>`;
+            }
+        }
+
+        function renderCompaniesTable() {
+            const tableDiv = document.getElementById('companiesTable');
+            
+            if (companies.length === 0) {
+                tableDiv.innerHTML = '<div class="alert alert-info">No companies found</div>';
+                return;
+            }
+
+            let html = `
+                <div class="table-container">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Company Name</th>
+                                <th>Username</th>
+                                <th>Email</th>
+                                <th>Status</th>
+                                <th>Registered</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+
+            companies.forEach(company => {
+                html += `
+                    <tr>
+                        <td><strong>${company.company_name}</strong></td>
+                        <td>${company.username}</td>
+                        <td>${company.email}</td>
+                        <td>${getStatusBadge(company.status || 'pending')}</td>
+                        <td>${formatDate(company.created_at)}</td>
+                        <td>
+                            <button class="btn btn-primary" style="padding: 0.5rem 1rem; margin-right: 0.5rem;" 
+                                    onclick="viewCompanyDrives(${company.id}, '${company.company_name}')">
+                                View Drives
+                            </button>
+                            ${company.status === 'pending' ? `
+                                <button class="btn btn-success" style="padding: 0.5rem 1rem; margin-right: 0.5rem;" 
+                                        onclick="approveCompany(${company.id})">
+                                    Approve
+                                </button>
+                                <button class="btn btn-danger" style="padding: 0.5rem 1rem;" 
+                                        onclick="rejectCompany(${company.id})">
+                                    Reject
+                                </button>
+                            ` : company.status === 'approved' ? `
+                                <button class="btn btn-warning" style="padding: 0.5rem 1rem;" 
+                                        onclick="suspendCompany(${company.id})">
+                                    Suspend
+                                </button>
+                            ` : company.status === 'suspended' ? `
+                                <button class="btn btn-success" style="padding: 0.5rem 1rem;" 
+                                        onclick="approveCompany(${company.id})">
+                                    Activate
+                                </button>
+                            ` : ''}
+                        </td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table></div>';
+            tableDiv.innerHTML = html;
+        }
+
+        async function approveCompany(id) {
+            if (!confirm('Approve this company?')) return;
+
+            try {
+                await API.request(API_CONFIG.ENDPOINTS.ADMIN_APPROVE_COMPANY(id), {
+                    method: 'PUT',
+                    body: JSON.stringify({ is_approved: true, notes: 'Approved by admin' })
+                });
+                showAlert('Company approved successfully', 'success');
+                loadCompanies();
+            } catch (error) {
+                showAlert(error.message, 'error');
+            }
+        }
+
+        async function suspendCompany(id) {
+            const reason = prompt('Reason for suspension (optional):');
+            if (reason === null) return;
+
+            try {
+                await API.request(API_CONFIG.ENDPOINTS.ADMIN_APPROVE_COMPANY(id), {
+                    method: 'PUT',
+                    body: JSON.stringify({ is_approved: false, notes: reason || 'Suspended by admin' })
+                });
+                showAlert('Company suspended', 'success');
+                loadCompanies();
+            } catch (error) {
+                showAlert(error.message, 'error');
+            }
+        }
+
+        async function rejectCompany(id) {
+            const reason = prompt('Reason for rejection (optional):');
+            if (reason === null) return;
+
+            try {
+                await API.request(API_CONFIG.ENDPOINTS.ADMIN_REJECT_COMPANY(id), {
+                    method: 'PUT',
+                    body: JSON.stringify({ reason: reason || 'Rejected by admin' })
+                });
+                showAlert('Company rejected', 'success');
+                loadCompanies();
+            } catch (error) {
+                showAlert(error.message, 'error');
+            }
+        }
+
+        async function viewCompanyDrives(companyId, companyName) {
+            const modal = document.getElementById('drivesModal');
+            const title = document.getElementById('drivesModalTitle');
+            const body = document.getElementById('drivesModalBody');
+            
+            title.textContent = `${companyName} - Drives`;
+            body.innerHTML = '<div class="spinner"></div>';
+            modal.classList.add('active');
+
+            try {
+                const drives = await API.request(API_CONFIG.ENDPOINTS.COMPANY_DRIVES, {
+                    headers: {
+                        'X-Company-ID': companyId
+                    }
+                });
+
+                if (drives.length === 0) {
+                    body.innerHTML = '<div class="alert alert-info">No drives found for this company</div>';
+                    return;
+                }
+
+                let html = `
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Title</th>
+                                    <th>Type</th>
+                                    <th>Duration</th>
+                                    <th>Status</th>
+                                    <th>Questions</th>
+                                    <th>Students</th>
+                                    <th>Created</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+
+                drives.forEach(drive => {
+                    html += `
+                        <tr>
+                            <td><strong>${drive.title}</strong></td>
+                            <td>${drive.question_type}</td>
+                            <td>${drive.duration_minutes} min</td>
+                            <td>${getStatusBadge(drive.status)}</td>
+                            <td>${drive.question_count || 0}</td>
+                            <td>${drive.student_count || 0}</td>
+                            <td>${formatDate(drive.created_at)}</td>
+                            <td>
+                                <button class="btn btn-primary" style="padding: 0.5rem 1rem;" 
+                                        onclick="viewDriveStudents(${companyId}, ${drive.id}, '${drive.title.replace(/'/g, "\\'")}')">
+                                    View Students
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
+
+                html += '</tbody></table></div>';
+                body.innerHTML = html;
+            } catch (error) {
+                body.innerHTML = `<div class="alert alert-error">${error.message}</div>`;
+            }
+        }
+
+        async function viewDriveStudents(companyId, driveId, driveTitle) {
+            const modal = document.getElementById('studentsModal');
+            const title = document.getElementById('studentsModalTitle');
+            const body = document.getElementById('studentsModalBody');
+            
+            title.textContent = `${driveTitle} - Students`;
+            body.innerHTML = '<div class="spinner"></div>';
+            modal.classList.add('active');
+
+            try {
+                const students = await API.request(API_CONFIG.ENDPOINTS.COMPANY_STUDENTS(driveId), {
+                    headers: {
+                        'X-Company-ID': companyId
+                    }
+                });
+
+                if (students.length === 0) {
+                    body.innerHTML = '<div class="alert alert-info">No students found for this drive</div>';
+                    return;
+                }
+
+                let html = `
+                    <div class="dashboard-stats mb-3">
+                        <div class="stat-card">
+                            <h3>Total Students</h3>
+                            <div class="stat-value">${students.length}</div>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Unique Emails</h3>
+                            <div class="stat-value">${new Set(students.map(s => s.email)).size}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <input type="text" id="studentSearch" class="form-control" 
+                               placeholder="Search by name, email, or roll number..." 
+                               oninput="filterStudents()">
+                    </div>
+
+                    <div class="table-container" id="studentsTable">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Roll Number</th>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>College</th>
+                                    <th>Group</th>
+                                    <th>Batch Year</th>
+                                </tr>
+                            </thead>
+                            <tbody id="studentsTableBody">
+                `;
+
+                students.forEach(student => {
+                    html += `
+                        <tr class="student-row" data-search="${student.name.toLowerCase()} ${student.email.toLowerCase()} ${student.roll_number.toLowerCase()}">
+                            <td>${student.roll_number}</td>
+                            <td><strong>${student.name}</strong></td>
+                            <td>${student.email}</td>
+                            <td>${student.college_name || 'N/A'}</td>
+                            <td>${student.student_group_name || 'N/A'}</td>
+                            <td>${student.batch_year || 'N/A'}</td>
+                        </tr>
+                    `;
+                });
+
+                html += '</tbody></table></div>';
+                body.innerHTML = html;
+            } catch (error) {
+                body.innerHTML = `<div class="alert alert-error">${error.message}</div>`;
+            }
+        }
+
+        function filterStudents() {
+            const search = document.getElementById('studentSearch').value.toLowerCase();
+            const rows = document.querySelectorAll('.student-row');
+            
+            rows.forEach(row => {
+                const searchText = row.getAttribute('data-search');
+                row.style.display = searchText.includes(search) ? '' : 'none';
+            });
+        }
+
+        function closeDrivesModal() {
+            document.getElementById('drivesModal').classList.remove('active');
+        }
+
+        function closeStudentsModal() {
+            document.getElementById('studentsModal').classList.remove('active');
+        }
+
+        document.getElementById('statusFilter').addEventListener('change', loadCompanies);
+        
+        // Load companies on page load
+        loadCompanies();
+    </script>
+</body>
+</html>

@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Send Emails - Company Exam Portal</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-brand">
+                <h2>🏢 Company Dashboard</h2>
+            </div>
+            <div class="nav-links">
+                <a href="company-dashboard.html" class="nav-link">Drives</a>
+                <button onclick="logout()" class="btn btn-secondary" style="padding: 0.5rem 1rem;">Logout</button>
+            </div>
+        </div>
+    </nav>
+
+    <main class="dashboard">
+        <div class="container">
+            <div class="dashboard-header">
+                <h1>Send Email Invitations</h1>
+                <button onclick="history.back()" class="btn btn-secondary">Back</button>
+            </div>
+
+            <div id="emailStatus" class="mb-4"></div>
+
+            <div class="form-container" style="max-width: 800px;">
+                <h3>Email Template Configuration</h3>
+                <p style="color: var(--text-secondary);">
+                    Configure the email template that will be sent to students. Use template variables for dynamic content.
+                </p>
+
+                <form id="emailTemplateForm" class="mb-4">
+                    <div class="form-group">
+                        <label>Available Variables:</label>
+                        <div style="background: var(--bg-color); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+                            <code>{{student_name}}</code>, <code>{{roll_number}}</code>, <code>{{drive_title}}</code>, 
+                            <code>{{company_name}}</code>, <code>{{password}}</code>, <code>{{login_url}}</code>, 
+                            <code>{{start_time}}</code>, <code>{{duration}}</code>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="subject_template">Email Subject *</label>
+                        <input type="text" id="subject_template" class="form-control" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="body_template">Email Body *</label>
+                        <textarea id="body_template" class="form-control" rows="10" required></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="use_custom_template" checked>
+                            Use custom template
+                        </label>
+                    </div>
+
+                    <div class="btn-group">
+                        <button type="submit" class="btn btn-primary">Update Template</button>
+                        <button type="button" class="btn btn-secondary" onclick="previewTemplate()">Preview</button>
+                    </div>
+                </form>
+
+                <div id="previewContainer" class="hidden mb-4"></div>
+
+                <div class="alert alert-warning mb-3">
+                    <strong>⚠️ Important:</strong> Make sure you have configured SMTP settings in your backend .env file before sending emails.
+                </div>
+
+                <button id="sendEmailsBtn" class="btn btn-success" style="width: 100%; padding: 1rem;" onclick="sendEmails()">
+                    📧 Send Emails to All Students
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <script src="js/config.js"></script>
+    <script>
+        requireAuth('company');
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const driveId = urlParams.get('id');
+
+        if (!driveId) {
+            window.location.href = 'company-dashboard.html';
+        }
+
+        async function loadEmailStatus() {
+            try {
+                const status = await API.request(API_CONFIG.ENDPOINTS.COMPANY_EMAIL_STATUS(driveId));
+                
+                const statusDiv = document.getElementById('emailStatus');
+                statusDiv.innerHTML = `
+                    <div class="portal-card">
+                        <h3>${status.drive_title}</h3>
+                        <p><strong>Approval Status:</strong> ${status.is_approved ? '✅ Approved' : '❌ Not Approved'}</p>
+                        <p><strong>Students:</strong> ${status.student_count}</p>
+                        <p><strong>Email Configuration:</strong> ${status.email_configured ? '✅ Configured' : '❌ Not Configured'}</p>
+                        <p><strong>Status:</strong> ${status.status_message}</p>
+                        
+                        ${!status.can_send_emails ? `
+                            <div class="alert alert-warning mt-2">
+                                Cannot send emails. Please ensure drive is approved and has students.
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+
+                document.getElementById('sendEmailsBtn').disabled = !status.can_send_emails;
+            } catch (error) {
+                showAlert(error.message, 'error');
+            }
+        }
+
+        async function loadEmailTemplate() {
+            try {
+                const template = await API.request(API_CONFIG.ENDPOINTS.COMPANY_EMAIL_TEMPLATE);
+                
+                document.getElementById('subject_template').value = template.subject_template;
+                document.getElementById('body_template').value = template.body_template;
+                document.getElementById('use_custom_template').checked = template.use_custom_template;
+            } catch (error) {
+                showAlert(error.message, 'error');
+            }
+        }
+
+        document.getElementById('emailTemplateForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Updating...';
+
+            try {
+                await API.request(API_CONFIG.ENDPOINTS.COMPANY_EMAIL_TEMPLATE, {
+                    method: 'PUT',
+                    body: JSON.stringify({
+                        subject_template: document.getElementById('subject_template').value,
+                        body_template: document.getElementById('body_template').value,
+                        use_custom_template: document.getElementById('use_custom_template').checked
+                    })
+                });
+
+                showAlert('Email template updated successfully!', 'success');
+            } catch (error) {
+                showAlert(error.message, 'error');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Update Template';
+            }
+        });
+
+        async function previewTemplate() {
+            const previewContainer = document.getElementById('previewContainer');
+            previewContainer.classList.remove('hidden');
+            previewContainer.innerHTML = '<div class="spinner"></div>';
+
+            try {
+                const preview = await API.request(API_CONFIG.ENDPOINTS.COMPANY_EMAIL_PREVIEW, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        subject_template: document.getElementById('subject_template').value,
+                        body_template: document.getElementById('body_template').value
+                    })
+                });
+
+                previewContainer.innerHTML = `
+                    <div class="portal-card">
+                        <h3>Email Preview</h3>
+                        <p><strong>Subject:</strong></p>
+                        <div style="background: var(--bg-color); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+                            ${preview.rendered_subject}
+                        </div>
+                        <p><strong>Body:</strong></p>
+                        <div style="background: var(--bg-color); padding: 1rem; border-radius: 8px; white-space: pre-wrap;">
+                            ${preview.rendered_body}
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                previewContainer.innerHTML = `<div class="alert alert-error">${error.message}</div>`;
+            }
+        }
+
+        async function sendEmails() {
+            if (!confirm('Send login credentials to all students? This will send emails to all students in this drive.')) {
+                return;
+            }
+
+            const btn = document.getElementById('sendEmailsBtn');
+            btn.disabled = true;
+            btn.textContent = 'Sending emails...';
+
+            try {
+                const result = await API.request(API_CONFIG.ENDPOINTS.COMPANY_SEND_EMAILS(driveId), {
+                    method: 'POST'
+                });
+
+                showAlert(`Successfully sent ${result.sent_count} emails! ${result.failed_count > 0 ? `Failed: ${result.failed_count}` : ''}`, 
+                         result.failed_count > 0 ? 'warning' : 'success');
+                
+                if (result.failed_emails && result.failed_emails.length > 0) {
+                    console.log('Failed emails:', result.failed_emails);
+                }
+            } catch (error) {
+                showAlert(error.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '📧 Send Emails to All Students';
+            }
+        }
+
+        loadEmailStatus();
+        loadEmailTemplate();
+    </script>
+</body>
+</html>

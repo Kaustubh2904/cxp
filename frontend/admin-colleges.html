@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Reference Data - Company Exam Portal</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-brand">
+                <h2>🎯 Admin Dashboard</h2>
+            </div>
+            <div class="nav-links">
+                <a href="admin-dashboard.html" class="nav-link">Companies</a>
+                <a href="admin-drives.html" class="nav-link">Drives</a>
+                <a href="admin-colleges.html" class="nav-link active">Colleges</a>
+                <button onclick="logout()" class="btn btn-secondary" style="padding: 0.5rem 1rem;">Logout</button>
+            </div>
+        </div>
+    </nav>
+
+    <main class="dashboard">
+        <div class="container">
+            <h1 class="mb-4">Reference Data Management</h1>
+
+            <!-- Pending Custom Colleges Section -->
+            <div class="mb-4">
+                <div class="dashboard-header">
+                    <h2>Pending Custom Colleges (Need Approval)</h2>
+                    <button onclick="loadPendingColleges()" class="btn btn-primary" style="padding: 0.5rem 1rem;">
+                        🔄 Refresh
+                    </button>
+                </div>
+                <div id="pendingCollegesTable"></div>
+            </div>
+
+            <!-- Colleges Section -->
+            <div class="mb-4">
+                <div class="dashboard-header">
+                    <h2>Approved Colleges</h2>
+                    <button onclick="loadColleges()" class="btn btn-primary" style="padding: 0.5rem 1rem;">
+                        🔄 Refresh
+                    </button>
+                </div>
+                <div id="collegesTable"></div>
+            </div>
+
+            <!-- Pending Custom Student Groups Section -->
+            <div class="mb-4">
+                <div class="dashboard-header">
+                    <h2>Pending Custom Student Groups (Need Approval)</h2>
+                    <button onclick="loadPendingGroups()" class="btn btn-primary" style="padding: 0.5rem 1rem;">
+                        🔄 Refresh
+                    </button>
+                </div>
+                <div id="pendingGroupsTable"></div>
+            </div>
+
+            <!-- Student Groups Section -->
+            <div class="mb-4">
+                <div class="dashboard-header">
+                    <h2>Approved Student Groups</h2>
+                    <button onclick="loadStudentGroups()" class="btn btn-primary" style="padding: 0.5rem 1rem;">
+                        🔄 Refresh
+                    </button>
+                </div>
+                <div id="studentGroupsTable"></div>
+            </div>
+        </div>
+    </main>
+
+    <script src="js/config.js"></script>
+    <script>
+        requireAuth('admin');
+
+        async function loadPendingColleges() {
+            const tableDiv = document.getElementById('pendingCollegesTable');
+            tableDiv.innerHTML = '<div class="spinner"></div>';
+
+            try {
+                const pendingColleges = await API.request(API_CONFIG.ENDPOINTS.ADMIN_PENDING_COLLEGES);
+                
+                if (pendingColleges.length === 0) {
+                    tableDiv.innerHTML = '<div class="alert alert-info">No pending custom colleges</div>';
+                    return;
+                }
+
+                let html = `
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>College Name</th>
+                                    <th>Usage Count</th>
+                                    <th>First Used</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+
+                pendingColleges.forEach(college => {
+                    html += `
+                        <tr>
+                            <td><strong>${college.name}</strong></td>
+                            <td>${college.usage_count} drive(s)</td>
+                            <td>${formatDate(college.first_used)}</td>
+                            <td>
+                                <button class="btn btn-success" style="padding: 0.5rem 1rem;" 
+                                        onclick="approveCustomCollege('${college.name.replace(/'/g, "\\'")}')">
+                                    Approve & Add to System
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
+
+                html += '</tbody></table></div>';
+                tableDiv.innerHTML = html;
+            } catch (error) {
+                tableDiv.innerHTML = `<div class="alert alert-error">${error.message}</div>`;
+            }
+        }
+
+        async function approveCustomCollege(name) {
+            if (!confirm(`Approve "${name}" and add it to the system?`)) return;
+
+            try {
+                const result = await API.request(API_CONFIG.ENDPOINTS.ADMIN_APPROVE_CUSTOM_COLLEGE, {
+                    method: 'PUT',
+                    body: JSON.stringify({ name })
+                });
+                showAlert(`College approved! Updated ${result.updated_targets} drive target(s)`, 'success');
+                loadPendingColleges();
+                loadColleges();
+            } catch (error) {
+                showAlert(error.message, 'error');
+            }
+        }
+
+        async function loadColleges() {
+            const tableDiv = document.getElementById('collegesTable');
+            tableDiv.innerHTML = '<div class="spinner"></div>';
+
+            try {
+                const colleges = await API.request(API_CONFIG.ENDPOINTS.ADMIN_COLLEGES);
+                
+                if (colleges.length === 0) {
+                    tableDiv.innerHTML = '<div class="alert alert-info">No colleges found</div>';
+                    return;
+                }
+
+                let html = `
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>College Name</th>
+                                    <th>Status</th>
+                                    <th>Created</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+
+                colleges.forEach(college => {
+                    html += `
+                        <tr>
+                            <td><strong>${college.name}</strong></td>
+                            <td>${college.is_approved ? 
+                                '<span class="badge badge-approved">Approved</span>' : 
+                                '<span class="badge badge-pending">Pending</span>'}</td>
+                            <td>${formatDate(college.created_at)}</td>
+                        </tr>
+                    `;
+                });
+
+                html += '</tbody></table></div>';
+                tableDiv.innerHTML = html;
+            } catch (error) {
+                tableDiv.innerHTML = `<div class="alert alert-error">${error.message}</div>`;
+            }
+        }
+
+        async function loadPendingGroups() {
+            const tableDiv = document.getElementById('pendingGroupsTable');
+            tableDiv.innerHTML = '<div class="spinner"></div>';
+
+            try {
+                const pendingGroups = await API.request(API_CONFIG.ENDPOINTS.ADMIN_PENDING_GROUPS);
+                
+                if (pendingGroups.length === 0) {
+                    tableDiv.innerHTML = '<div class="alert alert-info">No pending custom student groups</div>';
+                    return;
+                }
+
+                let html = `
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Group Name</th>
+                                    <th>Usage Count</th>
+                                    <th>First Used</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+
+                pendingGroups.forEach(group => {
+                    html += `
+                        <tr>
+                            <td><strong>${group.name}</strong></td>
+                            <td>${group.usage_count} drive(s)</td>
+                            <td>${formatDate(group.first_used)}</td>
+                            <td>
+                                <button class="btn btn-success" style="padding: 0.5rem 1rem;" 
+                                        onclick="approveCustomGroup('${group.name.replace(/'/g, "\\'")}')">
+                                    Approve & Add to System
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
+
+                html += '</tbody></table></div>';
+                tableDiv.innerHTML = html;
+            } catch (error) {
+                tableDiv.innerHTML = `<div class="alert alert-error">${error.message}</div>`;
+            }
+        }
+
+        async function approveCustomGroup(name) {
+            if (!confirm(`Approve "${name}" and add it to the system?`)) return;
+
+            try {
+                const result = await API.request(API_CONFIG.ENDPOINTS.ADMIN_APPROVE_CUSTOM_GROUP, {
+                    method: 'PUT',
+                    body: JSON.stringify({ name })
+                });
+                showAlert(`Student group approved! Updated ${result.updated_targets} drive target(s)`, 'success');
+                loadPendingGroups();
+                loadStudentGroups();
+            } catch (error) {
+                showAlert(error.message, 'error');
+            }
+        }
+
+        async function loadStudentGroups() {
+            const tableDiv = document.getElementById('studentGroupsTable');
+            tableDiv.innerHTML = '<div class="spinner"></div>';
+
+            try {
+                const groups = await API.request(API_CONFIG.ENDPOINTS.ADMIN_STUDENT_GROUPS);
+                
+                if (groups.length === 0) {
+                    tableDiv.innerHTML = '<div class="alert alert-info">No student groups found</div>';
+                    return;
+                }
+
+                let html = `
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Group Name</th>
+                                    <th>Status</th>
+                                    <th>Created</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+
+                groups.forEach(group => {
+                    html += `
+                        <tr>
+                            <td><strong>${group.name}</strong></td>
+                            <td>${group.is_approved ? 
+                                '<span class="badge badge-approved">Approved</span>' : 
+                                '<span class="badge badge-pending">Pending</span>'}</td>
+                            <td>${formatDate(group.created_at)}</td>
+                        </tr>
+                    `;
+                });
+
+                html += '</tbody></table></div>';
+                tableDiv.innerHTML = html;
+            } catch (error) {
+                tableDiv.innerHTML = `<div class="alert alert-error">${error.message}</div>`;
+            }
+        }
+
+        loadPendingColleges();
+        loadColleges();
+        loadPendingGroups();
+        loadStudentGroups();
+    </script>
+</body>
+</html>

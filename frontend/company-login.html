@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Company Login - Company Exam Portal</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-brand">
+                <h2>🎯 Company Exam Portal</h2>
+            </div>
+            <div class="nav-links">
+                <a href="index.html" class="nav-link">Home</a>
+                <a href="admin-login.html" class="nav-link">Admin</a>
+                <a href="company-login.html" class="nav-link active">Company</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="hero">
+        <div class="container">
+            <div class="form-container">
+                <h2 class="text-center mb-3">Company Login</h2>
+                <p class="text-center mb-4" style="color: var(--text-secondary);">
+                    Access your company dashboard
+                </p>
+
+                <form id="companyLoginForm">
+                    <div class="form-group">
+                        <label for="username">Username</label>
+                        <input type="text" id="username" class="form-control" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <input type="password" id="password" class="form-control" required>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">
+                        Login
+                    </button>
+                </form>
+
+                <p class="text-center mt-3">
+                    <span style="color: var(--text-secondary);">Don't have an account?</span>
+                    <a href="company-register.html" style="color: var(--primary-color); font-weight: 600;">
+                        Register here
+                    </a>
+                </p>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2025 Company Exam Portal. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script src="js/config.js"></script>
+    <script>
+        document.getElementById('companyLoginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            const originalText = submitBtn.textContent;
+            submitBtn.textContent = 'Logging in...';
+            submitBtn.disabled = true;
+
+            try {
+                const data = await API.request(API_CONFIG.ENDPOINTS.COMPANY_LOGIN, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        username: document.getElementById('username').value,
+                        password: document.getElementById('password').value
+                    })
+                });
+
+                API.setAuth(data.access_token, 'company');
+                showAlert('Login successful!', 'success');
+                
+                setTimeout(() => {
+                    window.location.href = 'company-dashboard.html';
+                }, 1000);
+            } catch (error) {
+                showAlert(error.message || 'Login failed', 'error');
+                submitBtn.textContent = originalText;
+                submitBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Drives - Company Exam Portal</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-brand">
+                <h2>🎯 Admin Dashboard</h2>
+            </div>
+            <div class="nav-links">
+                <a href="admin-dashboard.html" class="nav-link">Companies</a>
+                <a href="admin-drives.html" class="nav-link active">Drives</a>
+                <a href="admin-colleges.html" class="nav-link">Colleges</a>
+                <button onclick="logout()" class="btn btn-secondary" style="padding: 0.5rem 1rem;">Logout</button>
+            </div>
+        </div>
+    </nav>
+
+    <main class="dashboard">
+        <div class="container">
+            <div class="dashboard-header">
+                <h1>Drive Management</h1>
+                <div>
+                    <select id="statusFilter" class="form-control" style="width: auto; display: inline-block; margin-right: 1rem;">
+                        <option value="pending">Pending Approval</option>
+                        <option value="approved">Approved</option>
+                        <option value="rejected">Rejected</option>
+                        <option value="suspended">Suspended</option>
+                        <option value="all">All</option>
+                    </select>
+                    <button onclick="loadDrives()" class="btn btn-primary" style="padding: 0.5rem 1rem;">
+                        🔄 Refresh
+                    </button>
+                </div>
+            </div>
+
+            <div id="drivesTable"></div>
+        </div>
+    </main>
+
+    <!-- Drive Detail Modal -->
+    <div id="driveDetailModal" class="modal">
+        <div class="modal-content" style="max-width: 900px;">
+            <div class="modal-header">
+                <h3>Drive Details</h3>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div id="driveDetailContent"></div>
+        </div>
+    </div>
+
+    <script src="js/config.js"></script>
+    <script>
+        requireAuth('admin');
+
+        let drives = [];
+
+        async function loadDrives() {
+            const filter = document.getElementById('statusFilter').value;
+            const tableDiv = document.getElementById('drivesTable');
+            tableDiv.innerHTML = '<div class="spinner"></div>';
+
+            try {
+                drives = await API.request(`${API_CONFIG.ENDPOINTS.ADMIN_DRIVES}?status_filter=${filter}`);
+                renderDrivesTable();
+            } catch (error) {
+                tableDiv.innerHTML = `<div class="alert alert-error">${error.message}</div>`;
+            }
+        }
+
+        function renderDrivesTable() {
+            const tableDiv = document.getElementById('drivesTable');
+            
+            if (drives.length === 0) {
+                tableDiv.innerHTML = '<div class="alert alert-info">No drives found</div>';
+                return;
+            }
+
+            let html = `
+                <div class="table-container">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Title</th>
+                                <th>Company</th>
+                                <th>Type</th>
+                                <th>Duration</th>
+                                <th>Status</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+
+            drives.forEach(drive => {
+                html += `
+                    <tr>
+                        <td><strong>${drive.title}</strong></td>
+                        <td>${drive.company_name || 'N/A'}</td>
+                        <td>${drive.question_type}</td>
+                        <td>${drive.duration_minutes} min</td>
+                        <td>${getStatusBadge(drive.status)}</td>
+                        <td>${formatDate(drive.created_at)}</td>
+                        <td>
+                            <button class="btn btn-primary" style="padding: 0.5rem 1rem; margin-right: 0.5rem;" 
+                                    onclick="viewDriveDetail(${drive.id})">
+                                View
+                            </button>
+                            ${drive.status === 'submitted' ? `
+                                <button class="btn btn-success" style="padding: 0.5rem 1rem; margin-right: 0.5rem;" 
+                                        onclick="approveDrive(${drive.id})">
+                                    Approve
+                                </button>
+                                <button class="btn btn-danger" style="padding: 0.5rem 1rem;" 
+                                        onclick="rejectDrive(${drive.id})">
+                                    Reject
+                                </button>
+                            ` : drive.status === 'approved' ? `
+                                <button class="btn btn-warning" style="padding: 0.5rem 1rem;" 
+                                        onclick="suspendDrive(${drive.id})">
+                                    Suspend
+                                </button>
+                            ` : drive.status === 'suspended' ? `
+                                <button class="btn btn-success" style="padding: 0.5rem 1rem;" 
+                                        onclick="reactivateDrive(${drive.id})">
+                                    Reactivate
+                                </button>
+                            ` : ''}
+                        </td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table></div>';
+            tableDiv.innerHTML = html;
+        }
+
+        async function viewDriveDetail(id) {
+            const modal = document.getElementById('driveDetailModal');
+            const content = document.getElementById('driveDetailContent');
+            content.innerHTML = '<div class="spinner"></div>';
+            modal.classList.add('active');
+
+            try {
+                const detail = await API.request(API_CONFIG.ENDPOINTS.ADMIN_DRIVE_DETAIL(id));
+                
+                let html = `
+                    <div class="mb-3">
+                        <h4>${detail.drive.title}</h4>
+                        <p><strong>Company:</strong> ${detail.company?.company_name || 'N/A'}</p>
+                        <p><strong>Description:</strong> ${detail.drive.description || 'N/A'}</p>
+                        <p><strong>Duration:</strong> ${detail.drive.duration_minutes} minutes</p>
+                        <p><strong>Status:</strong> ${getStatusBadge(detail.drive.status)}</p>
+                    </div>
+
+                    <h4>Targets</h4>
+                    <div class="mb-3">
+                        ${detail.drive.targets.map(t => `
+                            <div class="badge badge-pending" style="margin: 0.25rem;">
+                                ${t.college_name || 'Any College'} - ${t.student_group_name || 'Any Group'}
+                                ${t.batch_year ? ` (${t.batch_year})` : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+
+                    <h4>Statistics</h4>
+                    <div class="dashboard-stats mb-3">
+                        <div class="stat-card">
+                            <h3>Questions</h3>
+                            <div class="stat-value">${detail.stats.total_questions}</div>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Students</h3>
+                            <div class="stat-value">${detail.stats.total_students}</div>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Total Points</h3>
+                            <div class="stat-value">${detail.stats.total_points}</div>
+                        </div>
+                    </div>
+
+                    <h4>Questions (${detail.questions.length})</h4>
+                    <div style="max-height: 300px; overflow-y: auto; margin-bottom: 1rem;" id="questionsContainer">
+                        ${detail.questions.slice(0, 10).map((q, i) => `
+                            <div class="question-item" style="padding: 1rem; background: var(--bg-color); margin-bottom: 0.5rem; border-radius: 8px;">
+                                <strong>${i + 1}. ${q.question_text}</strong><br>
+                                <small>Points: ${q.points}</small>
+                            </div>
+                        `).join('')}
+                        ${detail.questions.length > 10 ? `
+                            <div class="hidden-questions" style="display: none;">
+                                ${detail.questions.slice(10).map((q, i) => `
+                                    <div class="question-item" style="padding: 1rem; background: var(--bg-color); margin-bottom: 0.5rem; border-radius: 8px;">
+                                        <strong>${i + 11}. ${q.question_text}</strong><br>
+                                        <small>Points: ${q.points}</small>
+                                    </div>
+                                `).join('')}
+                            </div>
+                            <button class="btn btn-secondary" style="padding: 0.5rem 1rem; margin-top: 0.5rem;" onclick="toggleQuestions(this)">
+                                Show ${detail.questions.length - 10} More Questions
+                            </button>
+                        ` : ''}
+                    </div>
+
+                    <h4>Students (${detail.students.length})</h4>
+                    <div style="max-height: 200px; overflow-y: auto;" id="studentsContainer">
+                        ${detail.students.slice(0, 20).map(s => `
+                            <div class="student-item" style="padding: 0.5rem; background: var(--bg-color); margin-bottom: 0.25rem; border-radius: 4px;">
+                                ${s.name} (${s.roll_number}) - ${s.email}
+                            </div>
+                        `).join('')}
+                        ${detail.students.length > 20 ? `
+                            <div class="hidden-students" style="display: none;">
+                                ${detail.students.slice(20).map(s => `
+                                    <div class="student-item" style="padding: 0.5rem; background: var(--bg-color); margin-bottom: 0.25rem; border-radius: 4px;">
+                                        ${s.name} (${s.roll_number}) - ${s.email}
+                                    </div>
+                                `).join('')}
+                            </div>
+                            <button class="btn btn-secondary" style="padding: 0.5rem 1rem; margin-top: 0.5rem;" onclick="toggleStudents(this)">
+                                Show ${detail.students.length - 20} More Students
+                            </button>
+                        ` : ''}
+                    </div>
+                `;
+
+                content.innerHTML = html;
+            } catch (error) {
+                content.innerHTML = `<div class="alert alert-error">${error.message}</div>`;
+            }
+        }
+
+        async function approveDrive(id) {
+            const notes = prompt('Approval notes (optional):');
+            if (notes === null) return;
+
+            try {
+                await API.request(API_CONFIG.ENDPOINTS.ADMIN_APPROVE_DRIVE(id), {
+                    method: 'PUT',
+                    body: JSON.stringify({ 
+                        is_approved: true, 
+                        admin_notes: notes || 'Approved by admin' 
+                    })
+                });
+                showAlert('Drive approved successfully', 'success');
+                loadDrives();
+            } catch (error) {
+                showAlert(error.message, 'error');
+            }
+        }
+
+        async function rejectDrive(id) {
+            const notes = prompt('Reason for rejection:');
+            if (!notes) {
+                showAlert('Rejection reason is required', 'warning');
+                return;
+            }
+
+            try {
+                await API.request(API_CONFIG.ENDPOINTS.ADMIN_APPROVE_DRIVE(id), {
+                    method: 'PUT',
+                    body: JSON.stringify({ 
+                        is_approved: false, 
+                        admin_notes: notes 
+                    })
+                });
+                showAlert('Drive rejected', 'success');
+                loadDrives();
+            } catch (error) {
+                showAlert(error.message, 'error');
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('driveDetailModal').classList.remove('active');
+        }
+
+        function toggleQuestions(button) {
+            const hiddenDiv = button.previousElementSibling;
+            if (hiddenDiv.style.display === 'none') {
+                hiddenDiv.style.display = 'block';
+                button.textContent = 'Show Less';
+            } else {
+                hiddenDiv.style.display = 'none';
+                const count = hiddenDiv.querySelectorAll('.question-item').length;
+                button.textContent = `Show ${count} More Questions`;
+            }
+        }
+
+        function toggleStudents(button) {
+            const hiddenDiv = button.previousElementSibling;
+            if (hiddenDiv.style.display === 'none') {
+                hiddenDiv.style.display = 'block';
+                button.textContent = 'Show Less';
+            } else {
+                hiddenDiv.style.display = 'none';
+                const count = hiddenDiv.querySelectorAll('.student-item').length;
+                button.textContent = `Show ${count} More Students`;
+            }
+        }
+
+        async function suspendDrive(id) {
+            const reason = prompt('Reason for suspending this drive (optional):');
+            if (reason === null) return;
+
+            try {
+                await API.request(API_CONFIG.ENDPOINTS.ADMIN_SUSPEND_DRIVE(id), {
+                    method: 'PUT',
+                    body: JSON.stringify({ reason })
+                });
+                showAlert('Drive suspended successfully', 'success');
+                loadDrives();
+            } catch (error) {
+                showAlert(error.message, 'error');
+            }
+        }
+
+        async function reactivateDrive(id) {
+            if (!confirm('Reactivate this drive?')) return;
+
+            try {
+                await API.request(API_CONFIG.ENDPOINTS.ADMIN_REACTIVATE_DRIVE(id), {
+                    method: 'PUT'
+                });
+                showAlert('Drive reactivated successfully', 'success');
+                loadDrives();
+            } catch (error) {
+                showAlert(error.message, 'error');
+            }
+        }
+
+        document.getElementById('statusFilter').addEventListener('change', loadDrives);
+        
+        loadDrives();
+    </script>
+</body>
+</html>

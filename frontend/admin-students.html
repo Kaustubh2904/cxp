@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Students - Company Exam Portal</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-brand">
+                <h2>🎯 Admin Dashboard</h2>
+            </div>
+            <div class="nav-links">
+                <a href="admin-dashboard.html" class="nav-link">Companies</a>
+                <a href="admin-drives.html" class="nav-link">Drives</a>
+                <a href="admin-students.html" class="nav-link active">Students</a>
+                <a href="admin-colleges.html" class="nav-link">Colleges</a>
+                <button onclick="logout()" class="btn btn-secondary" style="padding: 0.5rem 1rem;">Logout</button>
+            </div>
+        </div>
+    </nav>
+
+    <main class="dashboard">
+        <div class="container">
+            <div class="dashboard-header">
+                <h1>Student Management</h1>
+                <div>
+                    <input type="text" id="searchInput" class="form-control" placeholder="Search by name, email, or roll number..." 
+                           style="width: 300px; display: inline-block; margin-right: 1rem;">
+                    <select id="driveFilter" class="form-control" style="width: auto; display: inline-block; margin-right: 1rem;">
+                        <option value="">All Drives</option>
+                    </select>
+                    <button onclick="loadStudents()" class="btn btn-primary" style="padding: 0.5rem 1rem;">
+                        🔄 Refresh
+                    </button>
+                </div>
+            </div>
+
+            <div class="dashboard-stats mb-3">
+                <div class="stat-card">
+                    <h3>Total Students</h3>
+                    <div class="stat-value" id="totalStudents">0</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Total Drives</h3>
+                    <div class="stat-value" id="totalDrives">0</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Unique Emails</h3>
+                    <div class="stat-value" id="uniqueEmails">0</div>
+                </div>
+            </div>
+
+            <div id="studentsTable"></div>
+        </div>
+    </main>
+
+    <script src="js/config.js"></script>
+    <script>
+        requireAuth('admin');
+
+        let allStudents = [];
+        let allDrives = [];
+        let filteredStudents = [];
+
+        async function loadStudents() {
+            const tableDiv = document.getElementById('studentsTable');
+            tableDiv.innerHTML = '<div class="spinner"></div>';
+
+            try {
+                // Load all drives first to get student data
+                allDrives = await API.request(API_CONFIG.ENDPOINTS.ADMIN_DRIVES + '?status_filter=all');
+                
+                // Populate drive filter
+                const driveFilter = document.getElementById('driveFilter');
+                let filterHtml = '<option value="">All Drives</option>';
+                allDrives.forEach(drive => {
+                    filterHtml += `<option value="${drive.id}">${drive.title} (${drive.company_name})</option>`;
+                });
+                driveFilter.innerHTML = filterHtml;
+
+                // Collect all students from all drives
+                allStudents = [];
+                const studentPromises = allDrives.map(drive => 
+                    API.request(`/api/company/drives/${drive.id}/students`)
+                        .then(students => {
+                            return students.map(s => ({
+                                ...s,
+                                drive_title: drive.title,
+                                drive_id: drive.id,
+                                company_name: drive.company_name || 'Unknown'
+                            }));
+                        })
+                        .catch(() => [])
+                );
+
+                const studentArrays = await Promise.all(studentPromises);
+                allStudents = studentArrays.flat();
+
+                updateStats();
+                filterAndRenderStudents();
+            } catch (error) {
+                tableDiv.innerHTML = `<div class="alert alert-error">${error.message}</div>`;
+            }
+        }
+
+        function updateStats() {
+            document.getElementById('totalStudents').textContent = allStudents.length;
+            document.getElementById('totalDrives').textContent = allDrives.length;
+            
+            const uniqueEmails = new Set(allStudents.map(s => s.email.toLowerCase()));
+            document.getElementById('uniqueEmails').textContent = uniqueEmails.size;
+        }
+
+        function filterAndRenderStudents() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const selectedDrive = document.getElementById('driveFilter').value;
+
+            filteredStudents = allStudents.filter(student => {
+                const matchesSearch = !searchTerm || 
+                    student.name?.toLowerCase().includes(searchTerm) ||
+                    student.email.toLowerCase().includes(searchTerm) ||
+                    student.roll_number.toLowerCase().includes(searchTerm) ||
+                    student.drive_title.toLowerCase().includes(searchTerm) ||
+                    student.company_name.toLowerCase().includes(searchTerm);
+
+                const matchesDrive = !selectedDrive || student.drive_id.toString() === selectedDrive;
+
+                return matchesSearch && matchesDrive;
+            });
+
+            renderStudentsTable();
+        }
+
+        function renderStudentsTable() {
+            const tableDiv = document.getElementById('studentsTable');
+            
+            if (filteredStudents.length === 0) {
+                tableDiv.innerHTML = '<div class="alert alert-info">No students found</div>';
+                return;
+            }
+
+            let html = `
+                <div class="table-container">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Roll Number</th>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Drive</th>
+                                <th>Company</th>
+                                <th>Added On</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+
+            filteredStudents.forEach(student => {
+                html += `
+                    <tr>
+                        <td><strong>${student.roll_number}</strong></td>
+                        <td>${student.name || 'N/A'}</td>
+                        <td>${student.email}</td>
+                        <td>${student.drive_title}</td>
+                        <td>${student.company_name}</td>
+                        <td>${formatDate(student.created_at)}</td>
+                    </tr>
+                `;
+            });
+
+            html += `</tbody></table></div>`;
+            html += `<p class="mt-2"><strong>Showing ${filteredStudents.length} of ${allStudents.length} students</strong></p>`;
+            tableDiv.innerHTML = html;
+        }
+
+        // Add event listeners for filters
+        document.getElementById('searchInput').addEventListener('input', filterAndRenderStudents);
+        document.getElementById('driveFilter').addEventListener('change', filterAndRenderStudents);
+
+        // Load students on page load
+        loadStudents();
+    </script>
+</body>
+</html>

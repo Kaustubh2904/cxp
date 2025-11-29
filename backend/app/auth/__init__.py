@@ -70,3 +70,12 @@ def get_company_user(current_user: dict = Depends(get_current_user)):
             detail="Company access required"
         )
     return current_user["user"]
+
+def get_company_or_admin_user(current_user: dict = Depends(get_current_user)):
+    """Allow both admin and company access - admin can access any company data"""
+    if current_user["user_type"] not in ["admin", "company"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin or Company access required"
+        )
+    return current_user

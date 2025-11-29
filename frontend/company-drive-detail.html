@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drive Details - Company Exam Portal</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-brand">
+                <h2>🏢 Company Dashboard</h2>
+            </div>
+            <div class="nav-links">
+                <a href="company-dashboard.html" class="nav-link">Drives</a>
+                <button onclick="logout()" class="btn btn-secondary" style="padding: 0.5rem 1rem;">Logout</button>
+            </div>
+        </div>
+    </nav>
+
+    <main class="dashboard">
+        <div class="container">
+            <div class="dashboard-header">
+                <h1 id="driveTitle">Drive Details</h1>
+                <div>
+                    <button onclick="loadDrive()" class="btn btn-primary" style="margin-right: 1rem;">
+                        🔄 Refresh
+                    </button>
+                    <button onclick="history.back()" class="btn btn-secondary">Back</button>
+                </div>
+            </div>
+
+            <div id="driveInfo" class="mb-4"></div>
+
+            <div class="mb-4">
+                <h2>Questions</h2>
+                <div class="btn-group mb-3">
+                    <input type="file" id="questionsFile" accept=".csv" style="display: none;" onchange="uploadQuestions()">
+                    <button onclick="document.getElementById('questionsFile').click()" class="btn btn-primary">
+                        Upload Questions (CSV)
+                    </button>
+                    <a href="sample_questions.csv" download class="btn btn-secondary">Download Sample CSV</a>
+                </div>
+                <div id="questionsTable"></div>
+            </div>
+
+            <div class="mb-4">
+                <h2>Students</h2>
+                <div class="btn-group mb-3">
+                    <input type="file" id="studentsFile" accept=".csv" style="display: none;" onchange="uploadStudents()">
+                    <button onclick="document.getElementById('studentsFile').click()" class="btn btn-primary">
+                        Upload Students (CSV)
+                    </button>
+                    <a href="sample_students.csv" download class="btn btn-secondary">Download Sample CSV</a>
+                </div>
+                <div id="studentsTable"></div>
+            </div>
+        </div>
+    </main>
+
+    <script src="js/config.js"></script>
+    <script>
+        requireAuth('company');
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const driveId = urlParams.get('id');
+
+        if (!driveId) {
+            window.location.href = 'company-dashboard.html';
+        }
+
+        let drive = null;
+
+        async function loadDrive() {
+            try {
+                drive = await API.request(API_CONFIG.ENDPOINTS.COMPANY_DRIVE_DETAIL(driveId));
+                displayDriveInfo();
+                loadQuestions();
+                loadStudents();
+            } catch (error) {
+                showAlert(error.message, 'error');
+            }
+        }
+
+        function displayDriveInfo() {
+            document.getElementById('driveTitle').textContent = drive.title;
+            
+            const infoDiv = document.getElementById('driveInfo');
+            infoDiv.innerHTML = `
+                <div class="portal-card">
+                    <h3>${drive.title}</h3>
+                    <p><strong>Description:</strong> ${drive.description || 'N/A'}</p>
+                    <p><strong>Type:</strong> ${drive.question_type}</p>
+                    <p><strong>Duration:</strong> ${drive.duration_minutes} minutes</p>
+                    <p><strong>Status:</strong> ${getStatusBadge(drive.status)}</p>
+                    <p><strong>Approved:</strong> ${drive.is_approved ? '✅ Yes' : '❌ No'}</p>
+                    ${drive.admin_notes ? `<p><strong>Admin Notes:</strong> ${drive.admin_notes}</p>` : ''}
+                    
+                    <h4 class="mt-3">Targets:</h4>
+                    <div>
+                        ${drive.targets.map(t => `
+                            <div class="badge badge-pending" style="margin: 0.25rem;">
+                                ${t.college_name || 'Any College'} - ${t.student_group_name || 'Any Group'}
+                                ${t.batch_year ? ` (${t.batch_year})` : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        async function loadQuestions() {
+            const tableDiv = document.getElementById('questionsTable');
+            tableDiv.innerHTML = '<div class="spinner"></div>';
+
+            try {
+                const questions = await API.request(API_CONFIG.ENDPOINTS.COMPANY_QUESTIONS(driveId));
+                
+                if (questions.length === 0) {
+                    tableDiv.innerHTML = '<div class="alert alert-info">No questions yet. Upload a CSV file to add questions.</div>';
+                    return;
+                }
+
+                let html = `
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Question</th>
+                                    <th>Points</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+
+                questions.forEach((q, i) => {
+                    html += `
+                        <tr>
+                            <td>${i + 1}</td>
+                            <td>${q.question_text}</td>
+                            <td>${q.points}</td>
+                        </tr>
+                    `;
+                });
+
+                html += `</tbody></table></div>`;
+                html += `<p class="mt-2"><strong>Total Questions:</strong> ${questions.length}</p>`;
+                tableDiv.innerHTML = html;
+            } catch (error) {
+                tableDiv.innerHTML = `<div class="alert alert-error">${error.message}</div>`;
+            }
+        }
+
+        async function loadStudents() {
+            const tableDiv = document.getElementById('studentsTable');
+            tableDiv.innerHTML = '<div class="spinner"></div>';
+
+            try {
+                const students = await API.request(API_CONFIG.ENDPOINTS.COMPANY_STUDENTS(driveId));
+                
+                if (students.length === 0) {
+                    tableDiv.innerHTML = '<div class="alert alert-info">No students yet. Upload a CSV file to add students.</div>';
+                    return;
+                }
+
+                let html = `
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Roll Number</th>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+
+                students.forEach(s => {
+                    html += `
+                        <tr>
+                            <td>${s.roll_number}</td>
+                            <td>${s.name || 'N/A'}</td>
+                            <td>${s.email}</td>
+                        </tr>
+                    `;
+                });
+
+                html += `</tbody></table></div>`;
+                html += `<p class="mt-2"><strong>Total Students:</strong> ${students.length}</p>`;
+                tableDiv.innerHTML = html;
+            } catch (error) {
+                tableDiv.innerHTML = `<div class="alert alert-error">${error.message}</div>`;
+            }
+        }
+
+        async function uploadQuestions() {
+            const fileInput = document.getElementById('questionsFile');
+            const file = fileInput.files[0];
+            
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                showAlert('Uploading questions...', 'info');
+                await API.uploadFile(API_CONFIG.ENDPOINTS.COMPANY_UPLOAD_QUESTIONS(driveId), formData);
+                showAlert('Questions uploaded successfully!', 'success');
+                loadQuestions();
+                fileInput.value = '';
+            } catch (error) {
+                showAlert(error.message, 'error');
+                fileInput.value = '';
+            }
+        }
+
+        async function uploadStudents() {
+            const fileInput = document.getElementById('studentsFile');
+            const file = fileInput.files[0];
+            
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                showAlert('Uploading students...', 'info');
+                await API.uploadFile(API_CONFIG.ENDPOINTS.COMPANY_UPLOAD_STUDENTS(driveId), formData);
+                showAlert('Students uploaded successfully!', 'success');
+                loadStudents();
+                fileInput.value = '';
+            } catch (error) {
+                showAlert(error.message, 'error');
+                fileInput.value = '';
+            }
+        }
+
+        loadDrive();
+    </script>
+</body>
+</html>

@@ -36,7 +36,7 @@ def format_drive_response(drive, db):
     company_name = "Unknown Company"
     if drive.company_id:
         company = db.query(Company).filter(Company.id == drive.company_id).first()
-        company_name = company.name if company else "Unknown Company"
+        company_name = company.company_name if company else "Unknown Company"
     
     return {
         "id": drive.id,
@@ -165,7 +165,7 @@ def delete_company(
 def get_all_drives(
     skip: int = 0,
     limit: int = 100,
-    status_filter: str = "pending",  # pending, all, approved, rejected
+    status_filter: str = "pending",  # pending, all, approved, rejected, suspended
     db: Session = Depends(get_db),
     admin: dict = Depends(get_admin_user)
 ):
@@ -179,6 +179,8 @@ def get_all_drives(
         query = query.filter(Drive.is_approved == True)
     elif status_filter == "rejected":
         query = query.filter(Drive.status == "rejected")
+    elif status_filter == "suspended":
+        query = query.filter(Drive.status == "suspended")
     # "all" shows everything
     
     drives = query.offset(skip).limit(limit).all()
@@ -208,6 +210,56 @@ def approve_drive(
     db.refresh(drive)
     
     return format_drive_response(drive, db)
+
+@router.put("/drives/{drive_id}/suspend")
+def suspend_drive(
+    drive_id: int,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(get_admin_user)
+):
+    """Suspend a drive (prevent company from using it)"""
+    drive = db.query(Drive).filter(Drive.id == drive_id).first()
+    if not drive:
+        raise HTTPException(status_code=404, detail="Drive not found")
+    
+    if drive.status == "suspended":
+        raise HTTPException(status_code=400, detail="Drive is already suspended")
+    
+    drive.status = "suspended"
+    
+    db.commit()
+    db.refresh(drive)
+    
+    return {
+        "message": "Drive suspended successfully",
+        "drive_id": drive_id,
+        "status": drive.status
+    }
+
+@router.put("/drives/{drive_id}/reactivate")
+def reactivate_drive(
+    drive_id: int,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(get_admin_user)
+):
+    """Reactivate a suspended drive"""
+    drive = db.query(Drive).filter(Drive.id == drive_id).first()
+    if not drive:
+        raise HTTPException(status_code=404, detail="Drive not found")
+    
+    if drive.status != "suspended":
+        raise HTTPException(status_code=400, detail="Only suspended drives can be reactivated")
+    
+    drive.status = "approved"
+    
+    db.commit()
+    db.refresh(drive)
+    
+    return {
+        "message": "Drive reactivated successfully",
+        "drive_id": drive_id,
+        "status": drive.status
+    }
 
 @router.get("/drives/{drive_id}/detail")
 def get_drive_detail(
@@ -260,12 +312,10 @@ def get_drive_detail(
         if company:
             company_info = {
                 "id": company.id,
-                "name": company.name,
                 "company_name": company.company_name,
+                "username": company.username,
                 "email": company.email,
-                "phone": company.phone,
-                "website": company.website,
-                "description": company.description,
+                "logo_url": company.logo_url,
                 "status": company.status,
                 "created_at": company.created_at
             }
