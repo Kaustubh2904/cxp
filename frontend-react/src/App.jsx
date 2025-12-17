@@ -8,6 +8,9 @@ import CompanyRegister from './pages/CompanyRegister';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminStudents from './pages/AdminStudents';
 import CompanyDashboard from './pages/CompanyDashboard';
+import CompanyCreateDrive from './pages/CompanyCreateDrive';
+import CompanyDriveDetail from './pages/CompanyDriveDetail';
+import CompanySendEmails from './pages/CompanySendEmails';
 import Hero from './components/Hero';
 import Landing from './components/Landing';
 import Footer from './components/Footer';
@@ -115,6 +118,33 @@ const App = () => {
                 element={
                   <RequireAuth allowedTypes={['company']}>
                     <CompanyDashboard />
+                  </RequireAuth>
+                }
+              />
+
+              <Route
+                path="/company-create-drive"
+                element={
+                  <RequireAuth allowedTypes={['company']}>
+                    <CompanyCreateDrive />
+                  </RequireAuth>
+                }
+              />
+
+              <Route
+                path="/company-drive-detail"
+                element={
+                  <RequireAuth allowedTypes={['company']}>
+                    <CompanyDriveDetail />
+                  </RequireAuth>
+                }
+              />
+
+              <Route
+                path="/company-send-emails"
+                element={
+                  <RequireAuth allowedTypes={['company']}>
+                    <CompanySendEmails />
                   </RequireAuth>
                 }
               />

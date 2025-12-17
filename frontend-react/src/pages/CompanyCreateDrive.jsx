@@ -34,6 +34,7 @@ export default function CompanyCreateDrive() {
   const [studentGroups, setStudentGroups] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     loadReferenceData();
@@ -139,20 +140,22 @@ export default function CompanyCreateDrive() {
         })),
       };
 
+      let responseId;
       if (isEditMode) {
         await api.put(`/company/drives/${driveId}`, payload);
         toast.success('Drive updated successfully!');
+        responseId = driveId;
       } else {
         const res = await api.post('/company/drives', payload);
         toast.success('Drive created successfully!');
-        navigate(`/company/drive-detail?id=${res.data.id}`);
-        return;
+        responseId = res.data.id;
       }
 
-      navigate('/company-dashboard');
+      setTimeout(() => {
+        navigate(`/company-drive-detail?id=${responseId}`);
+      }, 1000);
     } catch (err) {
       toast.error(err?.response?.data?.detail || 'Failed to save drive');
-    } finally {
       setIsSubmitting(false);
     }
   };
@@ -166,286 +169,390 @@ export default function CompanyCreateDrive() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Navigation */}
-      <nav className="bg-white shadow sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold text-blue-600">
-                🏢 Company Dashboard
-              </h1>
-            </div>
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => navigate('/company-dashboard')}
-                className="text-gray-600   hover:text-gray-900   font-semibold"
-              >
-                Drives
-              </button>
-              <button
-                onClick={() => navigate('/company-dashboard')}
-                className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg font-semibold transition"
-              >
-                Back to Dashboard
-              </button>
-            </div>
+    <div className="flex h-screen bg-linear-to-br from-slate-50 via-gray-50 to-zinc-50">
+      {/* Sidebar - Desktop */}
+      <div className="hidden md:flex md:w-72 md:bg-linear-to-b md:from-slate-900 md:via-slate-800 md:to-slate-900 md:text-white md:flex-col md:sticky md:top-0 md:h-screen md:shadow-2xl">
+        <div className="p-8 border-b border-slate-700/50">
+          <h2 className="text-2xl font-bold science-gothic-fontstyle bg-linear-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+            Company Exam Portal
+          </h2>
+          <p className="text-sm text-slate-300 mt-2">Recruitment Dashboard</p>
+        </div>
+
+        <nav className="flex-1 p-4 space-y-2">
+          <button
+            onClick={() => navigate('/company-dashboard')}
+            className="w-full text-left px-4 py-3 rounded-xl bg-linear-to-r from-blue-500 to-purple-600 text-white shadow-lg font-medium flex items-center gap-3"
+          >
+            <span>📊</span> Dashboard
+          </button>
+        </nav>
+
+        <div className="p-4 border-t border-slate-700">
+          <button
+            onClick={() => {
+              logout();
+              navigate('/company/login');
+            }}
+            className="w-full inline-flex items-center justify-center px-5 py-2.5 bg-linear-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-bold rounded-lg shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-red-500/50 transition-all duration-300 transform hover:scale-105"
+          >
+            Logout
+            <svg
+              className="w-4 h-4 text-gray-800 dark:text-white ml-2"
+              aria-hidden="true"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 16 16"
+            >
+              <path
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M4 8h11m0 0-4-4m4 4-4 4m-5 3H3a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h3"
+              />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Mobile Menu Button */}
+      <div className="md:hidden fixed top-0 left-0 right-0 bg-slate-800 text-white p-4 flex justify-between items-center z-40">
+        <h2 className="text-lg font-bold science-gothic-fontstyle">
+          Company Exam Portal
+        </h2>
+        <button
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          className="text-2xl"
+        >
+          ☰
+        </button>
+      </div>
+
+      {/* Mobile Sidebar */}
+      {mobileMenuOpen && (
+        <div className="fixed inset-0 bg-slate-800 text-white z-30 pt-16 md:hidden">
+          <div className="p-4 border-t border-slate-700">
+            <button
+              onClick={() => {
+                logout();
+                navigate('/company/login');
+              }}
+              className="w-full px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-white font-semibold"
+            >
+              Logout
+            </button>
           </div>
         </div>
-      </nav>
+      )}
 
       {/* Main Content */}
-      <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold text-gray-900">
-            {isEditMode ? 'Edit Drive' : 'Create New Drive'}
-          </h2>
-        </div>
+      <div className="flex-1 flex flex-col overflow-hidden md:mt-0 mt-16">
+        {/* Header */}
+        <header className="bg-linear-to-r from-white via-blue-50 to-indigo-50 shadow-lg border-b border-gray-200/50 sticky top-0 z-40">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between items-center py-4">
+              <div className="hidden sm:block">
+                <h1 className="text-3xl font-bold science-gothic-fontstyle bg-linear-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+                  {isEditMode ? 'Edit Drive' : 'Create New Drive'}
+                </h1>
+                <p className="text-sm text-gray-600">
+                  Configure your recruitment drive details
+                </p>
+              </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Basic Info */}
-          <div className="bg-white rounded-lg shadow p-6 space-y-4">
-            <h3 className="text-lg font-semibold text-gray-900">
-              Basic Information
-            </h3>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700   mb-2">
-                Drive Title *
-              </label>
-              <input
-                type="text"
-                name="title"
-                value={formData.title}
-                onChange={handleFormChange}
-                className="w-full px-4 py-2 border border-gray-300   rounded-lg bg-white   text-gray-900   focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700   mb-2">
-                Description
-              </label>
-              <textarea
-                name="description"
-                value={formData.description}
-                onChange={handleFormChange}
-                rows="4"
-                className="w-full px-4 py-2 border border-gray-300   rounded-lg bg-white   text-gray-900   focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700   mb-2">
-                  Question Type *
-                </label>
-                <select
-                  name="question_type"
-                  value={formData.question_type}
-                  onChange={handleFormChange}
-                  className="w-full px-4 py-2 border border-gray-300   rounded-lg bg-white   text-gray-900   focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
+              <nav className="flex items-center space-x-2 sm:space-x-3">
+                <button
+                  onClick={() => navigate('/company-dashboard')}
+                  className="text-white bg-linear-to-br from-purple-600 to-blue-500 hover:bg-linear-to-bl focus:ring-4 focus:outline-none focus:ring-blue-300 dark:focus:ring-blue-800 font-medium rounded-xl text-sm px-4 py-2.5 text-center leading-5"
                 >
-                  <option value="">Select type...</option>
-                  <option value="mcqs">Multiple Choice Questions</option>
-                  <option value="aptitude">Aptitude</option>
-                  <option value="technical">Technical</option>
-                  <option value="coding">Coding</option>
-                  <option value="hr">HR Round</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700   mb-2">
-                  Duration (minutes) *
-                </label>
-                <input
-                  type="number"
-                  name="duration_minutes"
-                  value={formData.duration_minutes}
-                  onChange={handleFormChange}
-                  min="1"
-                  className="w-full px-4 py-2 border border-gray-300   rounded-lg bg-white   text-gray-900   focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700   mb-2">
-                Scheduled Start (Optional)
-              </label>
-              <input
-                type="datetime-local"
-                name="scheduled_start"
-                value={formData.scheduled_start}
-                onChange={handleFormChange}
-                className="w-full px-4 py-2 border border-gray-300   rounded-lg bg-white   text-gray-900   focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+                  ← Back to Dashboard
+                </button>
+              </nav>
             </div>
           </div>
+        </header>
 
-          {/* Target Students */}
-          <div className="bg-white rounded-lg shadow p-6 space-y-4">
-            <h3 className="text-lg font-semibold text-gray-900">
-              Target Students
-            </h3>{' '}
-            {targets.map((target, index) => (
-              <div
-                key={index}
-                className="border border-gray-200   rounded-lg p-4 space-y-4"
-              >
-                <div className="flex justify-between items-center mb-4">
-                  <h4 className="font-medium text-gray-900">
-                    Target Group {index + 1}
-                  </h4>
-                  {targets.length > 1 && (
+        {/* Main Content Area */}
+        <div className="flex-1 overflow-auto rounded-2xl">
+          <main className="py-8">
+            <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+              {/* Drive Configuration */}
+              <div className="bg-linear-to-br from-white via-blue-50/30 to-indigo-50/30 rounded-2xl shadow-xl border border-gray-200/50">
+                <div className="bg-linear-to-r from-blue-600 via-purple-600 to-indigo-600 px-8 py-6 rounded-t-2xl">
+                  <h2 className="text-3xl font-bold text-white flex items-center gap-3">
+                    {isEditMode ? 'Edit Drive' : 'Create New Drive'}
+                  </h2>
+                </div>
+
+                <form onSubmit={handleSubmit} className="p-8 space-y-8">
+                  {/* Basic Info */}
+                  <div className="bg-white rounded-2xl shadow-lg border border-gray-200/50 p-6">
+                    <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+                      <span>📝</span> Basic Information
+                    </h3>
+
+                    <div className="space-y-6">
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                          Drive Title *
+                        </label>
+                        <input
+                          type="text"
+                          name="title"
+                          value={formData.title}
+                          onChange={handleFormChange}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                          Description
+                        </label>
+                        <textarea
+                          name="description"
+                          value={formData.description}
+                          onChange={handleFormChange}
+                          rows="4"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <label className="block text-sm font-semibold text-gray-700 mb-2">
+                            Question Type *
+                          </label>
+                          <select
+                            name="question_type"
+                            value={formData.question_type}
+                            onChange={handleFormChange}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-xl bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                            required
+                          >
+                            <option value="">Select type...</option>
+                            <option value="mcqs">
+                              Multiple Choice Questions
+                            </option>
+                            <option value="aptitude">Aptitude</option>
+                            <option value="technical">Technical</option>
+                            <option value="coding">Coding</option>
+                            <option value="hr">HR Round</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-semibold text-gray-700 mb-2">
+                            Duration (minutes) *
+                          </label>
+                          <input
+                            type="number"
+                            name="duration_minutes"
+                            value={formData.duration_minutes}
+                            onChange={handleFormChange}
+                            min="1"
+                            className="w-full px-4 py-3 border border-gray-300 rounded-xl bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                          Scheduled Start (Optional)
+                        </label>
+                        <input
+                          type="datetime-local"
+                          name="scheduled_start"
+                          value={formData.scheduled_start}
+                          onChange={handleFormChange}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Target Students */}
+                  <div className="bg-white rounded-2xl shadow-lg border border-gray-200/50 p-6">
+                    <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+                      Target Students
+                    </h3>
+
+                    <div className="space-y-6">
+                      {targets.map((target, index) => (
+                        <div
+                          key={index}
+                          className="border-2 border-gray-200 rounded-2xl p-6 space-y-6 bg-gray-50/50"
+                        >
+                          <div className="flex justify-between items-center">
+                            <h4 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                              <span>👥</span> Target Group {index + 1}
+                            </h4>
+                            {targets.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removeTarget(index)}
+                                className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-sm rounded-xl font-semibold transition shadow-lg"
+                              >
+                                🗑️ Remove
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                College
+                              </label>
+                              <select
+                                value={target.college_id}
+                                onChange={(e) =>
+                                  handleTargetChange(
+                                    index,
+                                    'college_id',
+                                    e.target.value
+                                  )
+                                }
+                                className="w-full px-4 py-3 border border-gray-300 rounded-xl bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                              >
+                                <option value="">
+                                  Select or enter custom...
+                                </option>
+                                {colleges.map((college) => (
+                                  <option key={college.id} value={college.id}>
+                                    {college.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                Or Enter Custom College
+                              </label>
+                              <input
+                                type="text"
+                                value={target.custom_college_name}
+                                onChange={(e) =>
+                                  handleTargetChange(
+                                    index,
+                                    'custom_college_name',
+                                    e.target.value
+                                  )
+                                }
+                                placeholder="Custom college name"
+                                className="w-full px-4 py-3 border border-gray-300 rounded-xl bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                Student Group
+                              </label>
+                              <select
+                                value={target.student_group_id}
+                                onChange={(e) =>
+                                  handleTargetChange(
+                                    index,
+                                    'student_group_id',
+                                    e.target.value
+                                  )
+                                }
+                                className="w-full px-4 py-3 border border-gray-300 rounded-xl bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                              >
+                                <option value="">
+                                  Select or enter custom...
+                                </option>
+                                {studentGroups.map((group) => (
+                                  <option key={group.id} value={group.id}>
+                                    {group.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                Or Enter Custom Group
+                              </label>
+                              <input
+                                type="text"
+                                value={target.custom_student_group_name}
+                                onChange={(e) =>
+                                  handleTargetChange(
+                                    index,
+                                    'custom_student_group_name',
+                                    e.target.value
+                                  )
+                                }
+                                placeholder="Custom group name"
+                                className="w-full px-4 py-3 border border-gray-300 rounded-xl bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">
+                              Batch Year (Optional)
+                            </label>
+                            <input
+                              type="text"
+                              value={target.batch_year}
+                              onChange={(e) =>
+                                handleTargetChange(
+                                  index,
+                                  'batch_year',
+                                  e.target.value
+                                )
+                              }
+                              placeholder="e.g., 2025"
+                              className="w-full px-4 py-3 border border-gray-300 rounded-xl bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                            />
+                          </div>
+                        </div>
+                      ))}
+
+                      <button
+                        type="button"
+                        onClick={addTarget}
+                        className="w-full px-6 py-4 border-2 border-dashed border-blue-300 rounded-2xl text-blue-600 hover:border-blue-500 hover:text-blue-700 hover:bg-blue-50 font-semibold transition flex items-center justify-center gap-2"
+                      >
+                        <span>➕</span> Add Another Target Group
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Submit Buttons */}
+                  <div className="flex flex-col sm:flex-row gap-4 justify-end">
                     <button
                       type="button"
-                      onClick={() => removeTarget(index)}
-                      className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-sm rounded-lg transition"
+                      onClick={() => navigate('/company-dashboard')}
+                      className="px-8 py-3 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 font-semibold transition"
                     >
-                      Remove
+                      Cancel
                     </button>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700   mb-2">
-                      College
-                    </label>
-                    <select
-                      value={target.college_id}
-                      onChange={(e) =>
-                        handleTargetChange(index, 'college_id', e.target.value)
-                      }
-                      className="w-full px-4 py-2 border border-gray-300   rounded-lg bg-white   text-gray-900   focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="px-8 py-3 bg-linear-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 disabled:from-gray-400 disabled:to-gray-500 text-white rounded-xl font-semibold transition shadow-lg"
                     >
-                      <option value="">Select or enter custom...</option>
-                      {colleges.map((college) => (
-                        <option key={college.id} value={college.id}>
-                          {college.name}
-                        </option>
-                      ))}
-                    </select>
+                      {isSubmitting
+                        ? '💾 Saving...'
+                        : isEditMode
+                        ? 'Update Drive'
+                        : 'Create Drive'}
+                    </button>
                   </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700   mb-2">
-                      Or Enter Custom College
-                    </label>
-                    <input
-                      type="text"
-                      value={target.custom_college_name}
-                      onChange={(e) =>
-                        handleTargetChange(
-                          index,
-                          'custom_college_name',
-                          e.target.value
-                        )
-                      }
-                      placeholder="Custom college name"
-                      className="w-full px-4 py-2 border border-gray-300   rounded-lg bg-white   text-gray-900   focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700   mb-2">
-                      Student Group
-                    </label>
-                    <select
-                      value={target.student_group_id}
-                      onChange={(e) =>
-                        handleTargetChange(
-                          index,
-                          'student_group_id',
-                          e.target.value
-                        )
-                      }
-                      className="w-full px-4 py-2 border border-gray-300   rounded-lg bg-white   text-gray-900   focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">Select or enter custom...</option>
-                      {studentGroups.map((group) => (
-                        <option key={group.id} value={group.id}>
-                          {group.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700   mb-2">
-                      Or Enter Custom Group
-                    </label>
-                    <input
-                      type="text"
-                      value={target.custom_student_group_name}
-                      onChange={(e) =>
-                        handleTargetChange(
-                          index,
-                          'custom_student_group_name',
-                          e.target.value
-                        )
-                      }
-                      placeholder="Custom group name"
-                      className="w-full px-4 py-2 border border-gray-300   rounded-lg bg-white   text-gray-900   focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700   mb-2">
-                    Batch Year (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={target.batch_year}
-                    onChange={(e) =>
-                      handleTargetChange(index, 'batch_year', e.target.value)
-                    }
-                    placeholder="e.g., 2025"
-                    className="w-full px-4 py-2 border border-gray-300   rounded-lg bg-white   text-gray-900   focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
+                </form>
               </div>
-            ))}
-            <button
-              type="button"
-              onClick={addTarget}
-              className="w-full px-4 py-2 border-2 border-dashed border-gray-300   rounded-lg text-gray-700   hover:border-blue-500 hover:text-blue-600   font-semibold transition"
-            >
-              + Add Another Target
-            </button>
-          </div>
-
-          {/* Submit Buttons */}
-          <div className="flex gap-4 justify-between">
-            <button
-              type="button"
-              onClick={() => navigate('/company-dashboard')}
-              className="px-6 py-2 border border-gray-300   rounded-lg text-gray-900   hover:bg-gray-50   font-semibold transition"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-lg font-semibold transition"
-            >
-              {isSubmitting
-                ? 'Saving...'
-                : isEditMode
-                ? 'Update Drive'
-                : 'Create Drive'}
-            </button>
-          </div>
-        </form>
-      </main>
+            </div>
+          </main>
+        </div>
+      </div>
     </div>
   );
 }

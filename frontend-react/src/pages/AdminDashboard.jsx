@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../lib/api';
+import AdminStudents from './AdminStudents';
+import AdminColleges from './AdminColleges';
 
 export default function AdminDashboard() {
   const { logout } = useAuth();
@@ -49,12 +51,9 @@ export default function AdminDashboard() {
   });
   const [approvalNotes, setApprovalNotes] = useState('');
 
-  // ============= COLLEGES TAB STATES =============
-  const [pendingColleges, setPendingColleges] = useState([]);
-  const [approvedColleges, setApprovedColleges] = useState([]);
-  const [pendingGroups, setPendingGroups] = useState([]);
-  const [approvedGroups, setApprovedGroups] = useState([]);
-  const [collegesLoading, setCollegesLoading] = useState(false);
+
+
+
 
   // ============= COMPANIES TAB EFFECTS =============
   useEffect(() => {
@@ -70,12 +69,9 @@ export default function AdminDashboard() {
     }
   }, [driveStatusFilter, activeTab]);
 
-  // ============= COLLEGES TAB EFFECTS =============
-  useEffect(() => {
-    if (activeTab === 'colleges') {
-      loadCollegesData();
-    }
-  }, [activeTab]);
+
+
+
 
   // ============= COMPANIES TAB FUNCTIONS =============
   const loadCompanies = async () => {
@@ -191,8 +187,9 @@ export default function AdminDashboard() {
 
   const rejectDrive = async (id, reason = '') => {
     try {
-      await api.put(`/admin/drives/${id}/reject`, {
-        reason: reason || 'Rejected by admin',
+      await api.put(`/admin/drives/${id}/approve`, {
+        is_approved: false,
+        admin_notes: reason || 'Rejected by admin',
       });
       toast.success('Drive rejected successfully');
       await loadAllDrives();
@@ -232,10 +229,13 @@ export default function AdminDashboard() {
     try {
       const res = await api.get(`/admin/drives/${driveId}/detail`);
       // Backend returns nested structure: {drive, questions, students, stats}
+      const detail = res.data;
       const flatData = {
-        ...res.data.drive,
-        questions: res.data.questions || [],
-        students: res.data.students || [],
+        ...detail.drive,
+        questions: detail.questions || [],
+        students: detail.students || [],
+        targets: detail.drive.targets || [],
+        total_points: detail.stats?.total_points || 0,
       };
       setDriveDetailData(flatData);
       setDriveDetailModal({ open: true, data: flatData });
@@ -246,61 +246,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // ============= COLLEGES TAB FUNCTIONS =============
-  const loadCollegesData = async () => {
-    setCollegesLoading(true);
-    try {
-      const [pending, approved, pendingG, approvedG] = await Promise.all([
-        api.get('/admin/pending-colleges').catch(() => ({ data: [] })),
-        api.get('/admin/colleges').catch(() => ({ data: [] })),
-        api.get('/admin/pending-groups').catch(() => ({ data: [] })),
-        api.get('/admin/student-groups').catch(() => ({ data: [] })),
-      ]);
 
-      setPendingColleges(pending.data || []);
-      setApprovedColleges(approved.data || []);
-      setPendingGroups(pendingG.data || []);
-      setApprovedGroups(approvedG.data || []);
-    } catch (err) {
-      toast.error(
-        err?.response?.data?.detail || 'Failed to load colleges data'
-      );
-    } finally {
-      setCollegesLoading(false);
-    }
-  };
-
-  const approveCustomCollege = async (collegeName) => {
-    if (!window.confirm(`Approve "${collegeName}" and add it to the system?`))
-      return;
-    try {
-      const res = await api.put('/admin/approve-custom-college', {
-        name: collegeName,
-      });
-      toast.success(
-        `College approved! Updated ${res.data?.updated_targets || 0} drive(s)`
-      );
-      await loadCollegesData();
-    } catch (err) {
-      toast.error(err?.response?.data?.detail || 'Failed to approve college');
-    }
-  };
-
-  const approveCustomGroup = async (groupName) => {
-    if (!window.confirm(`Approve "${groupName}" and add it to the system?`))
-      return;
-    try {
-      const res = await api.put('/admin/approve-custom-group', {
-        name: groupName,
-      });
-      toast.success(
-        `Group approved! Updated ${res.data?.updated_targets || 0} drive(s)`
-      );
-      await loadCollegesData();
-    } catch (err) {
-      toast.error(err?.response?.data?.detail || 'Failed to approve group');
-    }
-  };
 
   // ============= HELPER FUNCTIONS =============
   const getStatusBadge = (status) => {
@@ -333,15 +279,7 @@ export default function AdminDashboard() {
     });
   };
 
-  const filteredStudents = driveStudentsList.filter((student) => {
-    const search = studentSearch.toLowerCase();
-    return (
-      student.name.toLowerCase().includes(search) ||
-      student.email.toLowerCase().includes(search) ||
-      (student.roll_number &&
-        student.roll_number.toLowerCase().includes(search))
-    );
-  });
+
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900">
@@ -404,6 +342,16 @@ export default function AdminDashboard() {
               }`}
             >
               Drives
+            </button>
+            <button
+              onClick={() => setActiveTab('students')}
+              className={`px-6 py-4 font-semibold border-b-2 cursor-pointer transition ${
+                activeTab === 'students'
+                  ? 'border-red-600 text-red-600 dark:text-red-400'
+                  : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+              }`}
+            >
+              Students
             </button>
             <button
               onClick={() => setActiveTab('colleges')}
@@ -568,7 +516,7 @@ export default function AdminDashboard() {
         {activeTab === 'drives' && (
           <div>
             <div className="flex justify-between items-center mb-8">
-              <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
+              <h2 className="text-3xl font-bold science-gothic-fontstyle text-gray-900 dark:text-white">
                 Drive Management
               </h2>
               <div className="flex gap-4">
@@ -577,7 +525,7 @@ export default function AdminDashboard() {
                   onChange={(e) => setDriveStatusFilter(e.target.value)}
                   className="px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-gray-500"
                 >
-                  <option value="submitted">Pending Approval</option>
+                  <option value="pending">Pending Approval</option>
                   <option value="approved">Approved</option>
                   <option value="rejected">Rejected</option>
                   <option value="suspended">Suspended</option>
@@ -708,258 +656,11 @@ export default function AdminDashboard() {
           </div>
         )}
 
+        {/* ============= STUDENTS TAB ============= */}
+        {activeTab === 'students' && <AdminStudents />}
+
         {/* ============= COLLEGES TAB ============= */}
-        {activeTab === 'colleges' && (
-          <div>
-            <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-8">
-              Reference Data Management
-            </h2>
-
-            {collegesLoading ? (
-              <div className="flex justify-center py-12">
-                <div className="animate-spin h-12 w-12 border-4 border-red-500 border-t-transparent rounded-full"></div>
-              </div>
-            ) : (
-              <div className="space-y-8">
-                {/* Pending Colleges */}
-                <div>
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-                      Pending Custom Colleges (Need Approval)
-                    </h3>
-                    <button
-                      onClick={loadCollegesData}
-                      className="px-6 py-2 bg-blue-500 hover:bg-blue-700 text-white rounded-lg font-semibold transition cursor-pointer"
-                    >
-                      Refresh
-                    </button>
-                  </div>
-                  {pendingColleges.length === 0 ? (
-                    <div className="bg-blue-50 dark:bg-slate-800 border border-blue-200 dark:border-slate-700 rounded-lg p-6 text-center">
-                      <p className="text-blue-800 dark:text-blue-300">
-                        No pending custom colleges
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto bg-white dark:bg-slate-800 rounded-lg shadow">
-                      <table className="w-full">
-                        <thead className="bg-gray-100 dark:bg-slate-700 border-b border-gray-200 dark:border-slate-600">
-                          <tr>
-                            <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">
-                              College Name
-                            </th>
-                            <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">
-                              Usage Count
-                            </th>
-                            <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">
-                              First Used
-                            </th>
-                            <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">
-                              Actions
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200 dark:divide-slate-700">
-                          {pendingColleges.map((college, idx) => (
-                            <tr
-                              key={idx}
-                              className="hover:bg-gray-50 dark:hover:bg-slate-700 transition"
-                            >
-                              <td className="px-6 py-4 font-semibold text-gray-900 dark:text-white">
-                                {college.name}
-                              </td>
-                              <td className="px-6 py-4 text-gray-700 dark:text-gray-300">
-                                {college.usage_count} drive(s)
-                              </td>
-                              <td className="px-6 py-4 text-gray-700 dark:text-gray-300">
-                                {formatDate(college.first_used)}
-                              </td>
-                              <td className="px-6 py-4">
-                                <button
-                                  onClick={() =>
-                                    approveCustomCollege(college.name)
-                                  }
-                                  className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg font-semibold transition"
-                                >
-                                  Approve & Add
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-
-                {/* Approved Colleges */}
-                <div>
-                  <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-                    Approved Colleges
-                  </h3>
-                  {approvedColleges.length === 0 ? (
-                    <div className="bg-blue-50 dark:bg-slate-800 border border-blue-200 dark:border-slate-700 rounded-lg p-6 text-center">
-                      <p className="text-blue-800 dark:text-blue-300">
-                        No colleges found
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto bg-white dark:bg-slate-800 rounded-lg shadow">
-                      <table className="w-full">
-                        <thead className="bg-gray-100 dark:bg-slate-700 border-b border-gray-200 dark:border-slate-600">
-                          <tr>
-                            <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">
-                              College Name
-                            </th>
-                            <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">
-                              Status
-                            </th>
-                            <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">
-                              Created
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200 dark:divide-slate-700">
-                          {approvedColleges.map((college, idx) => (
-                            <tr
-                              key={idx}
-                              className="hover:bg-gray-50 dark:hover:bg-slate-700 transition"
-                            >
-                              <td className="px-6 py-4 font-semibold text-gray-900 dark:text-white">
-                                {college.name}
-                              </td>
-                              <td className="px-6 py-4">
-                                {getStatusBadge(
-                                  college.is_approved ? 'approved' : 'pending'
-                                )}
-                              </td>
-                              <td className="px-6 py-4 text-gray-700 dark:text-gray-300">
-                                {formatDate(college.created_at)}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-
-                {/* Pending Student Groups */}
-                <div>
-                  <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-                    Pending Custom Student Groups (Need Approval)
-                  </h3>
-                  {pendingGroups.length === 0 ? (
-                    <div className="bg-blue-50 dark:bg-slate-800 border border-blue-200 dark:border-slate-700 rounded-lg p-6 text-center">
-                      <p className="text-blue-800 dark:text-blue-300">
-                        No pending custom student groups
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto bg-white dark:bg-slate-800 rounded-lg shadow">
-                      <table className="w-full">
-                        <thead className="bg-gray-100 dark:bg-slate-700 border-b border-gray-200 dark:border-slate-600">
-                          <tr>
-                            <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">
-                              Group Name
-                            </th>
-                            <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">
-                              Usage Count
-                            </th>
-                            <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">
-                              First Used
-                            </th>
-                            <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">
-                              Actions
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200 dark:divide-slate-700">
-                          {pendingGroups.map((group, idx) => (
-                            <tr
-                              key={idx}
-                              className="hover:bg-gray-50 dark:hover:bg-slate-700 transition"
-                            >
-                              <td className="px-6 py-4 font-semibold text-gray-900 dark:text-white">
-                                {group.name}
-                              </td>
-                              <td className="px-6 py-4 text-gray-700 dark:text-gray-300">
-                                {group.usage_count} drive(s)
-                              </td>
-                              <td className="px-6 py-4 text-gray-700 dark:text-gray-300">
-                                {formatDate(group.first_used)}
-                              </td>
-                              <td className="px-6 py-4">
-                                <button
-                                  onClick={() => approveCustomGroup(group.name)}
-                                  className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg font-semibold transition"
-                                >
-                                  Approve & Add
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-
-                {/* Approved Student Groups */}
-                <div>
-                  <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-                    Approved Student Groups
-                  </h3>
-                  {approvedGroups.length === 0 ? (
-                    <div className="bg-blue-50 dark:bg-slate-800 border border-blue-200 dark:border-slate-700 rounded-lg p-6 text-center">
-                      <p className="text-blue-800 dark:text-blue-300">
-                        No student groups found
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto bg-white dark:bg-slate-800 rounded-lg shadow">
-                      <table className="w-full">
-                        <thead className="bg-gray-100 dark:bg-slate-700 border-b border-gray-200 dark:border-slate-600">
-                          <tr>
-                            <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">
-                              Group Name
-                            </th>
-                            <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">
-                              Status
-                            </th>
-                            <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">
-                              Created
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200 dark:divide-slate-700">
-                          {approvedGroups.map((group, idx) => (
-                            <tr
-                              key={idx}
-                              className="hover:bg-gray-50 dark:hover:bg-slate-700 transition"
-                            >
-                              <td className="px-6 py-4 font-semibold text-gray-900 dark:text-white">
-                                {group.name}
-                              </td>
-                              <td className="px-6 py-4">
-                                {getStatusBadge(
-                                  group.is_approved ? 'approved' : 'pending'
-                                )}
-                              </td>
-                              <td className="px-6 py-4 text-gray-700 dark:text-gray-300">
-                                {formatDate(group.created_at)}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+        {activeTab === 'colleges' && <AdminColleges />}
       </main>
 
       {/* ============= MODALS ============= */}

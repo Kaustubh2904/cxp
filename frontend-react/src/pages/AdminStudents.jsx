@@ -1,11 +1,8 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
-import { useAuth } from '../contexts/AuthContext';
 import api from '../lib/api';
 
 export default function AdminStudents() {
-  const { logout } = useAuth();
-
   const [allStudents, setAllStudents] = useState([]);
   const [allDrives, setAllDrives] = useState([]);
   const [filteredStudents, setFilteredStudents] = useState([]);
@@ -77,52 +74,18 @@ export default function AdminStudents() {
     .size;
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-900">
-      {/* Navigation */}
-      <nav className="bg-white dark:bg-slate-800 shadow sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold text-red-600 dark:text-red-400">
-                🎯 Admin Dashboard
-              </h1>
-            </div>
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => logout()}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold transition"
-              >
-                Logout
-              </button>
-            </div>
-          </div>
-        </div>
-      </nav>
-
-      {/* Tab Navigation */}
-      <div className="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 sticky top-16 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex gap-0">
-            <button className="px-6 py-4 font-semibold border-b-2 border-red-600 text-red-600 dark:text-red-400 transition">
-              Students
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div>
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
+          <h2 className="text-3xl font-bold science-gothic-fontstyle text-gray-900 dark:text-white">
             Student Management
           </h2>
           <button
             onClick={loadStudents}
             disabled={isLoading}
-            className="px-6 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white rounded-lg font-semibold transition"
+            className="px-6 py-2 bg-blue-500 hover:bg-blue-700 text-white rounded-lg font-semibold transition cursor-pointer"
           >
-            {isLoading ? 'Loading...' : '🔄 Refresh'}
+            {isLoading ? 'Loading...' : ' Refresh'}
           </button>
         </div>
 
@@ -272,7 +235,6 @@ export default function AdminStudents() {
             </div>
           </div>
         )}
-      </main>
     </div>
   );
 }

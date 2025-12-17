@@ -170,14 +170,14 @@ export default function Navbar() {
                 <NavLink
                   to="/admin/login"
                   onClick={closeMobile}
-                  className="block px-3 py-2 text-base font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
+                  className="block px-3 py-2 text-base font-medium font-serif text-slate-700 hover:text-black"
                 >
                   Admin Login
                 </NavLink>
                 <NavLink
                   to="/company/login"
                   onClick={closeMobile}
-                  className="block px-3 py-2 text-base font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
+                  className="block px-3 py-2 text-base font-medium font-serif text-slate-700 hover:text-black"
                 >
                   Company Login
                 </NavLink>
@@ -196,7 +196,7 @@ export default function Navbar() {
                 <NavLink
                   to={user.userType === 'admin' ? '/admin' : '/company'}
                   onClick={closeMobile}
-                  className="block px-3 py-2 text-base font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
+                  className="block px-3 py-2 text-base font-semibold font-serif text-slate-600 hover:text-black"
                 >
                   Dashboard
                 </NavLink>
@@ -205,9 +205,24 @@ export default function Navbar() {
                     logout();
                     closeMobile();
                   }}
-                  className="block w-full mt-2 px-4 py-3 text-center bg-linear-to-r from-blue-600 to-blue-700 text-white font-bold rounded-lg"
+                  className="w-full inline-flex items-center justify-center px-5 py-2.5 bg-linear-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-bold rounded-lg shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-red-500/50 transition-all duration-300 transform hover:scale-105"
                 >
                   Logout
+                  <svg
+                    className="w-4 h-4 text-gray-800 dark:text-white ml-2"
+                    aria-hidden="true"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 16 16"
+                  >
+                    <path
+                      stroke="currentColor"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M4 8h11m0 0-4-4m4 4-4 4m-5 3H3a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h3"
+                    />
+                  </svg>
                 </button>
               </>
             )}
