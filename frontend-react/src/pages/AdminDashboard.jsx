@@ -849,7 +849,11 @@ export default function AdminDashboard() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200 dark:divide-slate-700">
-                        {filteredStudents.map((student, idx) => (
+                        {driveStudentsList.filter(student =>
+                          student.name.toLowerCase().includes(studentSearch.toLowerCase()) ||
+                          student.email.toLowerCase().includes(studentSearch.toLowerCase()) ||
+                          student.roll_number.toLowerCase().includes(studentSearch.toLowerCase())
+                        ).map((student, idx) => (
                           <tr
                             key={idx}
                             className="hover:bg-gray-50 dark:hover:bg-slate-700 transition"
@@ -878,7 +882,11 @@ export default function AdminDashboard() {
                     </table>
                   </div>
 
-                  {filteredStudents.length === 0 && (
+                  {driveStudentsList.filter(student =>
+                    student.name.toLowerCase().includes(studentSearch.toLowerCase()) ||
+                    student.email.toLowerCase().includes(studentSearch.toLowerCase()) ||
+                    student.roll_number.toLowerCase().includes(studentSearch.toLowerCase())
+                  ).length === 0 && studentSearch.trim() !== '' && (
                     <p className="text-center text-gray-600 dark:text-gray-400 mt-4">
                       No students match your search
                     </p>

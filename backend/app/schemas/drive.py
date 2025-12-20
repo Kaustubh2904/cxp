@@ -18,7 +18,7 @@ class DriveTargetResponse(BaseModel):
     batch_year: Optional[str] = None
     college_name: Optional[str] = None  # Resolved college name
     student_group_name: Optional[str] = None  # Resolved student group name
-    
+
     class Config:
         from_attributes = True
 
@@ -33,6 +33,7 @@ class DriveCreate(BaseModel):
 class DriveUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
+    question_type: Optional[str] = None
     targets: Optional[List[DriveTargetCreate]] = None
     duration_minutes: Optional[int] = None
     scheduled_start: Optional[datetime] = None

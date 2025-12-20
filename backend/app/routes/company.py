@@ -14,7 +14,7 @@ from app.schemas.drive import DriveCreate, DriveUpdate, DriveResponse, DriveStat
 from app.schemas.question import QuestionResponse
 from app.schemas.student import StudentResponse
 from app.schemas.email import (
-    EmailTemplateUpdate, EmailTemplateResponse, EmailTemplatePreview, 
+    EmailTemplateUpdate, EmailTemplateResponse, EmailTemplatePreview,
     EmailTemplatePreviewResponse, EmailSendResponse, EmailStatusResponse
 )
 from app.schemas.company import CollegeResponse, StudentGroupResponse
@@ -56,19 +56,19 @@ def format_drive_response(drive: Drive, db: Session):
     for target in drive.targets:
         college_name = None
         student_group_name = None
-        
+
         if target.college_id:
             college = db.query(College).filter(College.id == target.college_id).first()
             college_name = college.name if college else None
         elif target.custom_college_name:
             college_name = target.custom_college_name
-        
+
         if target.student_group_id:
             group = db.query(StudentGroup).filter(StudentGroup.id == target.student_group_id).first()
             student_group_name = group.name if group else None
         elif target.custom_student_group_name:
             student_group_name = target.custom_student_group_name
-        
+
         targets.append({
             "id": target.id,
             "college_id": target.college_id,
@@ -79,7 +79,7 @@ def format_drive_response(drive: Drive, db: Session):
             "college_name": college_name,
             "student_group_name": student_group_name
         })
-    
+
     return {
         "id": drive.id,
         "company_id": drive.company_id,
@@ -107,7 +107,7 @@ def get_company_drives(
     drives = db.query(Drive).filter(
         Drive.company_id == company_id  # Show all drives so company can see status
     ).offset(skip).limit(limit).all()
-    
+
     # Add counts for each drive
     result = []
     for drive in drives:
@@ -115,7 +115,7 @@ def get_company_drives(
         drive_dict["question_count"] = db.query(Question).filter(Question.drive_id == drive.id).count()
         drive_dict["student_count"] = db.query(Student).filter(Student.drive_id == drive.id).count()
         result.append(drive_dict)
-    
+
     return result
 
 @router.post("/drives", response_model=DriveResponse)
@@ -125,11 +125,11 @@ def create_drive(
     company: dict = Depends(get_company_user)
 ):
     """Create a new drive with improved targeting system"""
-    
+
     # Validate that we have at least one target
     if not drive_data.targets:
         raise HTTPException(status_code=400, detail="At least one target must be specified")
-    
+
     # Create the drive
     drive = Drive(
         company_id=company.id,
@@ -140,10 +140,10 @@ def create_drive(
         scheduled_start=drive_data.scheduled_start,
         status="draft"
     )
-    
+
     db.add(drive)
     db.flush()  # Get the drive ID without committing
-    
+
     # Create drive targets
     for target_data in drive_data.targets:
         # Create custom colleges and student groups if provided
@@ -153,14 +153,14 @@ def create_drive(
                 new_college = College(name=target_data.custom_college_name, is_approved=False)
                 db.add(new_college)
                 db.flush()
-        
+
         if target_data.custom_student_group_name:
             existing_group = db.query(StudentGroup).filter(StudentGroup.name == target_data.custom_student_group_name).first()
             if not existing_group:
                 new_group = StudentGroup(name=target_data.custom_student_group_name, is_approved=False)
                 db.add(new_group)
                 db.flush()
-        
+
         # Create drive target
         drive_target = DriveTarget(
             drive_id=drive.id,
@@ -171,10 +171,10 @@ def create_drive(
             batch_year=target_data.batch_year
         )
         db.add(drive_target)
-    
+
     db.commit()
     db.refresh(drive)
-    
+
     # Load the drive with targets for response
     drive_with_targets = db.query(Drive).filter(Drive.id == drive.id).first()
     return format_drive_response(drive_with_targets, db)
@@ -190,10 +190,10 @@ def get_drive(
         Drive.id == drive_id,
         Drive.company_id == company.id
     ).first()
-    
+
     if not drive:
         raise HTTPException(status_code=404, detail="Drive not found")
-    
+
     return format_drive_response(drive, db)
 
 @router.put("/drives/{drive_id}", response_model=DriveResponse)
@@ -208,29 +208,31 @@ def update_drive(
         Drive.id == drive_id,
         Drive.company_id == company.id
     ).first()
-    
+
     if not drive:
         raise HTTPException(status_code=404, detail="Drive not found")
-    
+
     # Only allow updates if drive is not approved yet
     if drive.is_approved:
         raise HTTPException(status_code=400, detail="Cannot update approved drive")
-    
+
     # Update basic fields
     if drive_data.title is not None:
         drive.title = drive_data.title
     if drive_data.description is not None:
         drive.description = drive_data.description
+    if drive_data.question_type is not None:
+        drive.question_type = drive_data.question_type
     if drive_data.duration_minutes is not None:
         drive.duration_minutes = drive_data.duration_minutes
     if drive_data.scheduled_start is not None:
         drive.scheduled_start = drive_data.scheduled_start
-    
+
     # Update targets if provided
     if drive_data.targets is not None:
         # Remove existing targets
         db.query(DriveTarget).filter(DriveTarget.drive_id == drive_id).delete()
-        
+
         # Add new targets
         for target_data in drive_data.targets:
             # Create custom colleges and student groups if provided
@@ -240,14 +242,14 @@ def update_drive(
                     new_college = College(name=target_data.custom_college_name, is_approved=False)
                     db.add(new_college)
                     db.flush()
-            
+
             if target_data.custom_student_group_name:
                 existing_group = db.query(StudentGroup).filter(StudentGroup.name == target_data.custom_student_group_name).first()
                 if not existing_group:
                     new_group = StudentGroup(name=target_data.custom_student_group_name, is_approved=False)
                     db.add(new_group)
                     db.flush()
-            
+
             # Create drive target
             drive_target = DriveTarget(
                 drive_id=drive.id,
@@ -258,10 +260,10 @@ def update_drive(
                 batch_year=target_data.batch_year
             )
             db.add(drive_target)
-    
+
     db.commit()
     db.refresh(drive)
-    
+
     return format_drive_response(drive, db)
 
 @router.delete("/drives/{drive_id}")
@@ -275,17 +277,17 @@ def delete_drive(
         Drive.id == drive_id,
         Drive.company_id == company.id
     ).first()
-    
+
     if not drive:
         raise HTTPException(status_code=404, detail="Drive not found")
-    
+
     # Only allow deletion if drive is not approved yet
     if drive.is_approved:
         raise HTTPException(status_code=400, detail="Cannot delete approved drive")
-    
+
     db.delete(drive)
     db.commit()
-    
+
     return {"message": "Drive deleted successfully"}
 
 @router.put("/drives/{drive_id}/submit", response_model=DriveResponse)
@@ -299,26 +301,26 @@ def submit_drive_for_approval(
         Drive.id == drive_id,
         Drive.company_id == company.id
     ).first()
-    
+
     if not drive:
         raise HTTPException(status_code=404, detail="Drive not found")
-    
+
     if drive.status != "draft":
         raise HTTPException(status_code=400, detail="Only draft drives can be submitted")
-    
+
     # Check if drive has questions and students
     question_count = db.query(Question).filter(Question.drive_id == drive_id).count()
     if question_count == 0:
         raise HTTPException(status_code=400, detail="Drive must have at least one question to submit")
-    
+
     student_count = db.query(Student).filter(Student.drive_id == drive_id).count()
     if student_count == 0:
         raise HTTPException(status_code=400, detail="Drive must have at least one student to submit")
-    
+
     drive.status = "submitted"
     db.commit()
     db.refresh(drive)
-    
+
     return drive
 
 @router.put("/drives/{drive_id}/status", response_model=DriveResponse)
@@ -333,17 +335,17 @@ def update_drive_status(
         Drive.id == drive_id,
         Drive.company_id == company.id
     ).first()
-    
+
     if not drive:
         raise HTTPException(status_code=404, detail="Drive not found")
-    
+
     if not drive.is_approved:
         raise HTTPException(status_code=400, detail="Drive not approved by admin")
-    
+
     drive.status = status_data.status
     db.commit()
     db.refresh(drive)
-    
+
     return drive
 
 @router.post("/drives/{drive_id}/duplicate", response_model=DriveResponse)
@@ -357,10 +359,10 @@ def duplicate_drive(
         Drive.id == drive_id,
         Drive.company_id == company.id
     ).first()
-    
+
     if not original_drive:
         raise HTTPException(status_code=404, detail="Drive not found")
-    
+
     # Create new drive with copied data
     new_drive = Drive(
         company_id=company.id,
@@ -372,10 +374,10 @@ def duplicate_drive(
         status="draft",
         is_approved=False
     )
-    
+
     db.add(new_drive)
     db.flush()  # Get the ID for the new drive
-    
+
     # Copy all targets
     for target in original_drive.targets:
         new_target = DriveTarget(
@@ -387,7 +389,7 @@ def duplicate_drive(
             batch_year=target.batch_year
         )
         db.add(new_target)
-    
+
     # Copy all questions
     original_questions = db.query(Question).filter(Question.drive_id == drive_id).all()
     for question in original_questions:
@@ -402,10 +404,10 @@ def duplicate_drive(
             points=question.points
         )
         db.add(new_question)
-    
+
     db.commit()
     db.refresh(new_drive)
-    
+
     return format_drive_response(new_drive, db)
 
 # Question management routes
@@ -420,10 +422,10 @@ def get_drive_questions(
         Drive.id == drive_id,
         Drive.company_id == company.id
     ).first()
-    
+
     if not drive:
         raise HTTPException(status_code=404, detail="Drive not found")
-    
+
     questions = db.query(Question).filter(Question.drive_id == drive_id).all()
     return questions
 
@@ -439,34 +441,34 @@ def upload_questions_csv(
         Drive.id == drive_id,
         Drive.company_id == company.id
     ).first()
-    
+
     if not drive:
         raise HTTPException(status_code=404, detail="Drive not found")
-    
+
     if drive.is_approved:
         raise HTTPException(status_code=400, detail="Cannot add questions to approved drive")
-    
+
     if not file.filename.endswith('.csv'):
         raise HTTPException(status_code=400, detail="File must be CSV format")
-    
+
     try:
         content = file.file.read().decode('utf-8')
         csv_reader = csv.DictReader(io.StringIO(content))
-        
+
         required_columns = ['question', 'option_a', 'option_b', 'option_c', 'option_d', 'correct_answer']
         if not all(col in csv_reader.fieldnames for col in required_columns):
             raise HTTPException(status_code=400, detail=f"CSV must contain columns: {', '.join(required_columns)}")
-        
+
         questions = []
         for row_num, row in enumerate(csv_reader, start=2):  # Start from 2 because of header
             try:
                 points = int(row.get('points', 1))
-                
+
                 # Validate correct_answer is one of the options
                 options = [row['option_a'], row['option_b'], row['option_c'], row['option_d']]
                 if row['correct_answer'] not in options:
                     raise ValueError(f"Row {row_num}: correct_answer must be one of the provided options")
-                
+
                 question = Question(
                     drive_id=drive_id,
                     question_text=row['question'].strip(),
@@ -478,18 +480,18 @@ def upload_questions_csv(
                     points=points
                 )
                 questions.append(question)
-                
+
             except (ValueError, KeyError) as e:
                 raise HTTPException(status_code=400, detail=f"Error in row {row_num}: {str(e)}")
-        
+
         if not questions:
             raise HTTPException(status_code=400, detail="No valid questions found in CSV")
-        
+
         db.add_all(questions)
         db.commit()
-        
+
         return {"message": f"Successfully uploaded {len(questions)} questions from CSV"}
-        
+
     except UnicodeDecodeError:
         raise HTTPException(status_code=400, detail="File encoding not supported. Please use UTF-8")
     except Exception as e:
@@ -507,24 +509,24 @@ def upload_students_csv(
         Drive.id == drive_id,
         Drive.company_id == company.id
     ).first()
-    
+
     if not drive:
         raise HTTPException(status_code=404, detail="Drive not found")
-    
+
     if drive.is_approved:
         raise HTTPException(status_code=400, detail="Cannot add students to approved drive")
-    
+
     if not file.filename.endswith('.csv'):
         raise HTTPException(status_code=400, detail="File must be CSV format")
-    
+
     try:
         content = file.file.read().decode('utf-8')
         csv_reader = csv.DictReader(io.StringIO(content))
-        
+
         required_columns = ['roll_number', 'email', 'name']
         if not all(col in csv_reader.fieldnames for col in required_columns):
             raise HTTPException(status_code=400, detail=f"CSV must contain columns: {', '.join(required_columns)}")
-        
+
         students = []
         for row_num, row in enumerate(csv_reader, start=2):  # Start from 2 because of header
             try:
@@ -533,10 +535,10 @@ def upload_students_csv(
                     Student.drive_id == drive_id,
                     Student.roll_number == row['roll_number'].strip()
                 ).first()
-                
+
                 if existing_student:
                     continue  # Skip duplicate students
-                
+
                 student = Student(
                     drive_id=drive_id,
                     company_id=company.id,
@@ -545,18 +547,18 @@ def upload_students_csv(
                     name=row['name'].strip()
                 )
                 students.append(student)
-                
+
             except (ValueError, KeyError) as e:
                 raise HTTPException(status_code=400, detail=f"Error in row {row_num}: {str(e)}")
-        
+
         if not students:
             raise HTTPException(status_code=400, detail="No new students found in CSV (duplicates skipped)")
-        
+
         db.add_all(students)
         db.commit()
-        
+
         return {"message": f"Successfully uploaded {len(students)} new students from CSV"}
-        
+
     except UnicodeDecodeError:
         raise HTTPException(status_code=400, detail="File encoding not supported. Please use UTF-8")
     except Exception as e:
@@ -573,10 +575,10 @@ def get_drive_students(
         Drive.id == drive_id,
         Drive.company_id == company_id
     ).first()
-    
+
     if not drive:
         raise HTTPException(status_code=404, detail="Drive not found")
-    
+
     students = db.query(Student).filter(Student.drive_id == drive_id).all()
     return students
 
@@ -609,7 +611,7 @@ def get_email_template(
     company_obj = db.query(Company).filter(Company.id == company.id).first()
     if not company_obj:
         raise HTTPException(status_code=404, detail="Company not found")
-    
+
     return {
         "subject_template": company_obj.email_subject_template,
         "body_template": company_obj.email_body_template,
@@ -628,32 +630,32 @@ def update_email_template(
     company_obj = db.query(Company).filter(Company.id == company.id).first()
     if not company_obj:
         raise HTTPException(status_code=404, detail="Company not found")
-    
+
     # Validate templates
     subject_validation = EmailTemplateProcessor.validate_template(template_data.subject_template)
     body_validation = EmailTemplateProcessor.validate_template(template_data.body_template)
-    
+
     if not subject_validation['is_valid']:
         raise HTTPException(
-            status_code=400, 
+            status_code=400,
             detail=f"Invalid variables in subject template: {subject_validation['invalid_variables']}"
         )
-    
+
     if not body_validation['is_valid']:
         raise HTTPException(
-            status_code=400, 
+            status_code=400,
             detail=f"Invalid variables in body template: {body_validation['invalid_variables']}"
         )
-    
+
     # Update template
     company_obj.email_subject_template = template_data.subject_template
     company_obj.email_body_template = template_data.body_template
     company_obj.use_custom_template = template_data.use_custom_template
     company_obj.template_updated_at = datetime.utcnow()
-    
+
     db.commit()
     db.refresh(company_obj)
-    
+
     return {
         "subject_template": company_obj.email_subject_template,
         "body_template": company_obj.email_body_template,
@@ -670,21 +672,21 @@ def preview_email_template(
 ):
     """Preview email template with sample data"""
     sample_data = EmailTemplateProcessor.get_sample_data()
-    
+
     # Use company name if available
     company_obj = db.query(Company).filter(Company.id == company.id).first()
     if company_obj:
         sample_data['company_name'] = company_obj.company_name
-    
+
     rendered_subject = EmailTemplateProcessor.render_template(
-        preview_data.subject_template, 
+        preview_data.subject_template,
         sample_data
     )
     rendered_body = EmailTemplateProcessor.render_template(
-        preview_data.body_template, 
+        preview_data.body_template,
         sample_data
     )
-    
+
     return {
         "rendered_subject": rendered_subject,
         "rendered_body": rendered_body,
@@ -702,81 +704,81 @@ def email_students(
     # Validate email configuration
     if not settings.smtp_username or not settings.smtp_password:
         raise HTTPException(
-            status_code=500, 
+            status_code=500,
             detail="Email configuration not complete. Please check SMTP settings."
         )
-    
+
     # Get drive and validate
     drive = db.query(Drive).filter(
         Drive.id == drive_id,
         Drive.company_id == company.id
     ).first()
-    
+
     if not drive:
         raise HTTPException(status_code=404, detail="Drive not found")
-    
+
     if not drive.is_approved:
         raise HTTPException(status_code=400, detail="Drive must be approved before emailing students")
-    
+
     # Get students
     students = db.query(Student).filter(Student.drive_id == drive_id).all()
     if not students:
         raise HTTPException(status_code=400, detail="No students found for this drive")
-    
+
     # Get company template
     company_obj = db.query(Company).filter(Company.id == company.id).first()
     if not company_obj:
         raise HTTPException(status_code=404, detail="Company not found")
-    
+
     try:
         # Create SMTP session
         server = smtplib.SMTP(settings.smtp_server, settings.smtp_port)
         server.starttls()
         server.login(settings.smtp_username, settings.smtp_password)
-        
+
         sent_count = 0
         failed_emails = []
-        
+
         for student in students:
             try:
                 # Prepare email variables
                 email_variables = EmailTemplateProcessor.prepare_email_variables(
                     student, drive, company_obj
                 )
-                
+
                 # Render email content
                 subject = EmailTemplateProcessor.render_template(
-                    company_obj.email_subject_template, 
+                    company_obj.email_subject_template,
                     email_variables
                 )
                 body = EmailTemplateProcessor.render_template(
-                    company_obj.email_body_template, 
+                    company_obj.email_body_template,
                     email_variables
                 )
-                
+
                 # Create email message
                 message = MIMEMultipart()
                 message["From"] = f"{settings.smtp_from_name} <{settings.smtp_username}>"
                 message["To"] = student.email
                 message["Subject"] = subject
-                
+
                 # Attach body
                 message.attach(MIMEText(body, "plain"))
-                
+
                 # Send email
                 server.send_message(message)
                 sent_count += 1
-                
+
             except Exception as e:
                 failed_emails.append({
                     "student_roll": student.roll_number,
                     "student_email": student.email,
                     "error": str(e)
                 })
-        
+
         # Close SMTP session
         server.quit()
-        
+
         return {
             "success": True,
             "message": f"Email sending completed",
@@ -785,10 +787,10 @@ def email_students(
             "total_students": len(students),
             "failed_emails": failed_emails
         }
-        
+
     except smtplib.SMTPAuthenticationError:
         raise HTTPException(
-            status_code=400, 
+            status_code=400,
             detail="Email authentication failed. Please check SMTP credentials."
         )
     except smtplib.SMTPConnectError:
@@ -810,38 +812,38 @@ def get_email_status(
         Drive.id == drive_id,
         Drive.company_id == company.id
     ).first()
-    
+
     if not drive:
         raise HTTPException(status_code=404, detail="Drive not found")
-    
+
     student_count = db.query(Student).filter(Student.drive_id == drive_id).count()
     company_obj = db.query(Company).filter(Company.id == company.id).first()
-    
+
     # Check email configuration
     email_configured = bool(settings.smtp_username and settings.smtp_password)
-    
+
     # Generate preview
     if company_obj:
         sample_data = EmailTemplateProcessor.get_sample_data()
         sample_data['company_name'] = company_obj.company_name
         sample_data['drive_title'] = drive.title
-        
+
         preview_subject = EmailTemplateProcessor.render_template(
             company_obj.email_subject_template, sample_data
         )[:100] + "..."
         preview_body = EmailTemplateProcessor.render_template(
             company_obj.email_body_template, sample_data
         )[:200] + "..."
-        
+
         template_preview = {
             "subject": preview_subject,
             "body": preview_body
         }
     else:
         template_preview = {"subject": "Template not found", "body": ""}
-    
+
     can_send = drive.is_approved and student_count > 0 and email_configured
-    
+
     status_message = (
         "Ready to send emails" if can_send
         else "Drive not approved" if not drive.is_approved
@@ -849,7 +851,7 @@ def get_email_status(
         else "Email not configured" if not email_configured
         else "Unknown error"
     )
-    
+
     return {
         "drive_id": drive_id,
         "drive_title": drive.title,
@@ -876,44 +878,44 @@ async def upload_questions_csv(
         Drive.id == drive_id,
         Drive.company_id == company.id
     ).first()
-    
+
     if not drive:
         raise HTTPException(status_code=404, detail="Drive not found")
-    
+
     if drive.is_approved:
         raise HTTPException(status_code=400, detail="Cannot upload questions to approved drive")
-    
+
     if not file.filename.endswith('.csv'):
         raise HTTPException(status_code=400, detail="File must be a CSV")
-    
+
     try:
         # Read CSV content
         content = await file.read()
         csv_data = content.decode('utf-8')
         csv_reader = csv.DictReader(io.StringIO(csv_data))
-        
+
         added_count = 0
         error_count = 0
         errors = []
-        
+
         for row_num, row in enumerate(csv_reader, start=2):  # Start from row 2 (after header)
             try:
                 # Validate required fields
                 required_fields = ['question_text', 'option_a', 'option_b', 'option_c', 'option_d', 'correct_answer']
                 missing_fields = [field for field in required_fields if not row.get(field, '').strip()]
-                
+
                 if missing_fields:
                     errors.append(f"Row {row_num}: Missing fields: {', '.join(missing_fields)}")
                     error_count += 1
                     continue
-                
+
                 # Validate correct answer
                 correct_answer = row['correct_answer'].strip().upper()
                 if correct_answer not in ['A', 'B', 'C', 'D']:
                     errors.append(f"Row {row_num}: Correct answer must be A, B, C, or D")
                     error_count += 1
                     continue
-                
+
                 # Create question
                 question = Question(
                     drive_id=drive_id,
@@ -926,16 +928,16 @@ async def upload_questions_csv(
                     difficulty=row.get('difficulty', 'medium').strip().lower(),
                     points=int(row.get('points', 1))
                 )
-                
+
                 db.add(question)
                 added_count += 1
-                
+
             except Exception as e:
                 errors.append(f"Row {row_num}: {str(e)}")
                 error_count += 1
-        
+
         db.commit()
-        
+
         return {
             "success": True,
             "message": f"Upload completed. Added {added_count} questions, {error_count} errors.",
@@ -943,7 +945,7 @@ async def upload_questions_csv(
             "error_count": error_count,
             "errors": errors[:10]  # Limit to first 10 errors
         }
-        
+
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=f"Error processing CSV: {str(e)}")
@@ -961,45 +963,45 @@ async def upload_students_csv(
         Drive.id == drive_id,
         Drive.company_id == company.id
     ).first()
-    
+
     if not drive:
         raise HTTPException(status_code=404, detail="Drive not found")
-    
+
     if not file.filename.endswith('.csv'):
         raise HTTPException(status_code=400, detail="File must be a CSV")
-    
+
     try:
         # Read CSV content
         content = await file.read()
         csv_data = content.decode('utf-8')
         csv_reader = csv.DictReader(io.StringIO(csv_data))
-        
+
         added_count = 0
         error_count = 0
         errors = []
-        
+
         for row_num, row in enumerate(csv_reader, start=2):  # Start from row 2 (after header)
             try:
                 # Validate required fields
                 required_fields = ['name', 'email', 'roll_number']
                 missing_fields = [field for field in required_fields if not row.get(field, '').strip()]
-                
+
                 if missing_fields:
                     errors.append(f"Row {row_num}: Missing fields: {', '.join(missing_fields)}")
                     error_count += 1
                     continue
-                
+
                 # Check if student already exists for this drive
                 existing_student = db.query(Student).filter(
                     Student.drive_id == drive_id,
                     Student.email == row['email'].strip()
                 ).first()
-                
+
                 if existing_student:
                     errors.append(f"Row {row_num}: Student with email {row['email']} already exists")
                     error_count += 1
                     continue
-                
+
                 # Get or create college
                 college_name = row.get('college', '').strip()
                 college = None
@@ -1010,7 +1012,7 @@ async def upload_students_csv(
                         college = College(name=college_name, is_approved=False)
                         db.add(college)
                         db.flush()  # To get the college ID
-                
+
                 # Get or create student group
                 group_name = row.get('student_group', '').strip()
                 student_group = None
@@ -1021,7 +1023,7 @@ async def upload_students_csv(
                         student_group = StudentGroup(name=group_name, is_approved=False)
                         db.add(student_group)
                         db.flush()  # To get the group ID
-                
+
                 # Create student
                 student = Student(
                     drive_id=drive_id,
@@ -1031,16 +1033,16 @@ async def upload_students_csv(
                     college_id=college.id if college else None,
                     student_group_id=student_group.id if student_group else None
                 )
-                
+
                 db.add(student)
                 added_count += 1
-                
+
             except Exception as e:
                 errors.append(f"Row {row_num}: {str(e)}")
                 error_count += 1
-        
+
         db.commit()
-        
+
         return {
             "success": True,
             "message": f"Upload completed. Added {added_count} students, {error_count} errors.",
@@ -1048,7 +1050,7 @@ async def upload_students_csv(
             "error_count": error_count,
             "errors": errors[:10]  # Limit to first 10 errors
         }
-        
+
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=f"Error processing CSV: {str(e)}")

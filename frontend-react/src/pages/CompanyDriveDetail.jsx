@@ -255,7 +255,7 @@ export default function CompanyDriveDetail() {
             <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
               {/* Drive Overview */}
               <div className="bg-linear-to-br from-white via-blue-50/30 to-indigo-50/30 rounded-2xl shadow-xl border border-gray-200/50">
-                <div className="bg-linear-to-r from-blue-600 via-purple-600 to-indigo-600 px-8 py-6">
+                <div className="bg-linear-to-r from-blue-600 via-purple-600 to-indigo-600 px-8 py-6 rounded-t-2xl">
                   <h2 className="text-3xl font-bold text-white flex items-center gap-3">
                     <span>📋</span> {drive.title}
                   </h2>
@@ -314,7 +314,7 @@ export default function CompanyDriveDetail() {
 
               {/* Questions Management */}
               <div className="bg-linear-to-br from-white via-blue-50/30 to-indigo-50/30 rounded-2xl shadow-xl border border-gray-200/50">
-                <div className="bg-linear-to-r from-green-600 via-emerald-600 to-teal-600 px-8 py-6">
+                <div className="bg-linear-to-r from-green-600 via-emerald-600 to-teal-600 px-8 py-6 rounded-t-2xl">
                   <h3 className="text-2xl font-bold text-white flex items-center gap-3">
                     <span>❓</span> Questions Management
                   </h3>
