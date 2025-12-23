@@ -11,7 +11,7 @@ export default function CompanySendEmails() {
 
   const driveId = searchParams.get('id');
 
-  const [driveInfo, setDriveInfo] = useState(null);
+  const [emailStatus, setEmailStatus] = useState(null);
   const [emailConfig, setEmailConfig] = useState({
     subject_template: '',
     body_template: '',
@@ -45,9 +45,9 @@ export default function CompanySendEmails() {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [driveRes, configRes] = await Promise.all([
-        api.get(`/company/drives/${driveId}`),
-        api.get(`/company/email-template?drive_id=${driveId}`).catch(() => ({
+      const [statusRes, configRes] = await Promise.all([
+        api.get(`/company/drives/${driveId}/email-status`).catch(() => null),
+        api.get(`/company/email-template`).catch(() => ({
           data: {
             subject_template: 'Invitation to {{drive_title}}',
             body_template:
@@ -57,7 +57,7 @@ export default function CompanySendEmails() {
         })),
       ]);
 
-      setDriveInfo(driveRes.data);
+      setEmailStatus(statusRes?.data || null);
       setEmailConfig(configRes.data);
     } catch (err) {
       toast.error(err?.response?.data?.detail || 'Failed to load data');
@@ -78,7 +78,7 @@ export default function CompanySendEmails() {
     setIsSubmitting(true);
 
     try {
-      await api.put(`/company/email-template?drive_id=${driveId}`, emailConfig);
+      await api.put(`/company/email-template`, emailConfig);
       toast.success('Email template updated successfully!');
     } catch (err) {
       toast.error(err?.response?.data?.detail || 'Failed to update template');
@@ -92,12 +92,12 @@ export default function CompanySendEmails() {
     const sampleData = {
       '{{student_name}}': 'John Doe',
       '{{roll_number}}': '2024001',
-      '{{drive_title}}': driveInfo?.title || 'Drive',
-      '{{company_name}}': driveInfo?.company_name || 'Company',
+      '{{drive_title}}': emailStatus?.drive_title || 'Drive',
+      '{{company_name}}': 'Company',
       '{{password}}': 'temp123456',
-      '{{login_url}}': 'https://exam.example.com',
+      '{{login_url}}': 'http://localhost:5173/student-login',
       '{{start_time}}': new Date().toLocaleString(),
-      '{{duration}}': driveInfo?.duration_minutes || '60',
+      '{{duration}}': '60',
     };
 
     Object.entries(sampleData).forEach(([key, value]) => {
@@ -116,12 +116,10 @@ export default function CompanySendEmails() {
 
     setIsSendingEmails(true);
     try {
-      const res = await api.post(`/company/send-emails?drive_id=${driveId}`, {
-        use_custom_template: emailConfig.use_custom_template,
-      });
+      const res = await api.post(`/company/drives/${driveId}/email-students`);
 
       toast.success(
-        `Emails sent successfully to ${res.data?.emails_sent || 0} students!`
+        `Emails sent successfully to ${res.data?.sent_count || 0} students!`
       );
       setTimeout(() => navigate('/company-dashboard'), 2000);
     } catch (err) {
@@ -139,7 +137,7 @@ export default function CompanySendEmails() {
     );
   }
 
-  if (!driveInfo) {
+  if (!emailStatus) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -149,7 +147,7 @@ export default function CompanySendEmails() {
     );
   }
 
-  const canSendEmails = driveInfo.is_approved && driveInfo.student_count > 0;
+  const canSendEmails = emailStatus?.can_send_emails || false;
 
   return (
     <div className="flex h-screen bg-linear-to-br from-slate-50 via-gray-50 to-zinc-50">
@@ -259,74 +257,57 @@ export default function CompanySendEmails() {
         {/* Main Content Area */}
         <div className="flex-1 overflow-auto">
           <main className="py-8">
+            <div className="max-w-[832px] mx-auto sm:px-6 lg:px-8 space-y-8 bg-linear-to-r from-blue-600 via-purple-600 to-indigo-600 px-8 py-6 rounded-t-2xl">
+              <h3 className="text-2xl font-bold text-white flex items-center gap-3">
+                {emailStatus.drive_title}
+              </h3>
+            </div>
             <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
-              {/* Drive Status */}
-              <div className="bg-linear-to-br from-white via-blue-50/30 to-indigo-50/30 rounded-2xl shadow-xl border border-gray-200/50">
-                <div className="bg-linear-to-r from-blue-600 via-purple-600 to-indigo-600 px-8 py-6 rounded-t-2xl">
-                  <h2 className="text-3xl font-bold text-white flex items-center gap-3">
-                    {driveInfo.title}
-                  </h2>
-                </div>
+              {/* Email Status */}
+              {emailStatus && (
+                <div className="bg-white rounded-b-xl shadow-lg border border-gray-200 p-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-200/50">
+                      <p className="flex items-center gap-2">
+                        <strong>Approval Status:</strong>
+                        {emailStatus.is_approved
+                          ? ' Approved'
+                          : ' Not Approved'}
+                      </p>
+                    </div>
 
-                <div className="p-8">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
                     <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-200/50">
-                      <p className="text-sm font-semibold text-gray-600 mb-2">
-                        Approval Status
-                      </p>
-                      <p className="text-gray-900 font-medium flex items-center gap-2">
-                        {driveInfo.is_approved
-                          ? '✅ Approved'
-                          : '❌ Not Approved'}
+                      <p className="flex items-center gap-2">
+                        <strong>Students:</strong> {emailStatus.student_count}
                       </p>
                     </div>
+
                     <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-200/50">
-                      <p className="text-sm font-semibold text-gray-600 mb-2">
-                        Students
-                      </p>
-                      <p className="text-gray-900 font-medium">
-                        {driveInfo.student_count || 0}
+                      <p className="flex items-center gap-2">
+                        <strong>Email Configuration:</strong>
+                        {emailStatus.email_configured
+                          ? 'Configured'
+                          : 'Not Configured'}
                       </p>
                     </div>
+
                     <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-200/50">
-                      <p className="text-sm font-semibold text-gray-600 mb-2">
-                        Questions
-                      </p>
-                      <p className="text-gray-900 font-medium">
-                        {driveInfo.question_count || 0}
-                      </p>
-                    </div>
-                    <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-200/50">
-                      <p className="text-sm font-semibold text-gray-600 mb-2">
-                        Status
-                      </p>
-                      <p className="text-gray-900 font-medium">
-                        {driveInfo.status}
+                      <p className="flex items-center gap-2">
+                        <strong>Status:</strong> {emailStatus.status_message}
                       </p>
                     </div>
                   </div>
 
-                  {!canSendEmails && (
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6">
-                      <p className="text-yellow-800 flex items-center gap-2 mb-3">
-                        <span>⚠️</span> Cannot send emails yet. Please ensure:
+                  {!emailStatus.can_send_emails && (
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mt-4">
+                      <p className="text-yellow-800">
+                        ⚠️ Cannot send emails. Please ensure drive is approved
+                        and has students.
                       </p>
-                      <ul className="space-y-2 text-yellow-800 text-sm">
-                        {!driveInfo.is_approved && (
-                          <li className="flex items-center gap-2">
-                            <span>✗</span> Drive must be approved by admin
-                          </li>
-                        )}
-                        {driveInfo.student_count === 0 && (
-                          <li className="flex items-center gap-2">
-                            <span>✗</span> Drive must have at least one student
-                          </li>
-                        )}
-                      </ul>
                     </div>
                   )}
                 </div>
-              </div>
+              )}
 
               {/* Email Template Configuration */}
               <div className="bg-linear-to-br from-white via-blue-50/30 to-indigo-50/30 rounded-2xl shadow-xl border border-gray-200/50">

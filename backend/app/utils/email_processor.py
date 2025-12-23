@@ -16,17 +16,17 @@ TEMPLATE_VARIABLES = {
 
 class EmailTemplateProcessor:
     """Process email templates with variable substitution"""
-    
+
     @staticmethod
     def render_template(template: str, variables: Dict[str, Any]) -> str:
         """Replace template variables with actual values"""
         def replace_var(match):
             var_name = match.group(1)
-            value = variables.get(var_name, f"{{{{{var_name}}}}}")
+            value = variables.get(var_name, "")  # Replace unknown variables with empty string
             return str(value)
-        
+
         return re.sub(r'\{\{(\w+)\}\}', replace_var, template)
-    
+
     @staticmethod
     def get_sample_data() -> Dict[str, str]:
         """Sample data for template preview"""
@@ -36,32 +36,31 @@ class EmailTemplateProcessor:
             'drive_title': 'Software Engineer Position',
             'company_name': 'TechCorp Solutions',
             'password': 'SoftwareEngineer2024',
-            'login_url': 'http://localhost:3000/student-login',
             'start_time': 'December 15, 2024 at 10:00 AM',
             'duration': '90'
         }
-    
+
     @staticmethod
     def validate_template(template: str) -> Dict[str, Any]:
         """Validate template syntax and variables"""
         variables_used = re.findall(r'\{\{(\w+)\}\}', template)
         valid_variables = set(TEMPLATE_VARIABLES.keys())
         invalid_variables = set(variables_used) - valid_variables
-        
+
         return {
             'is_valid': len(invalid_variables) == 0,
             'invalid_variables': list(invalid_variables),
             'variables_used': variables_used,
             'valid_variables': list(valid_variables)
         }
-    
+
     @staticmethod
     def generate_password(drive_title: str) -> str:
         """Generate password from drive title"""
         # Remove spaces and special characters, keep alphanumeric
         clean_title = re.sub(r'[^a-zA-Z0-9]', '', drive_title)
         return clean_title[:20] if clean_title else 'DefaultPassword123'
-    
+
     @staticmethod
     def format_datetime(dt) -> str:
         """Format datetime for email display"""
@@ -70,7 +69,7 @@ class EmailTemplateProcessor:
         if isinstance(dt, str):
             return dt
         return dt.strftime('%B %d, %Y at %I:%M %p')
-    
+
     @staticmethod
     def prepare_email_variables(student, drive, company) -> Dict[str, str]:
         """Prepare variables for a specific student and drive"""
@@ -80,7 +79,7 @@ class EmailTemplateProcessor:
             'drive_title': drive.title,
             'company_name': company.company_name,
             'password': EmailTemplateProcessor.generate_password(drive.title),
-            'login_url': 'http://localhost:3000/student-login',
+            'login_url': 'http://localhost:5173/student-login',
             'start_time': EmailTemplateProcessor.format_datetime(drive.scheduled_start),
             'duration': str(drive.duration_minutes)
         }

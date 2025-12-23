@@ -6,7 +6,6 @@ import AdminLogin from './pages/AdminLogin';
 import CompanyLogin from './pages/CompanyLogin';
 import CompanyRegister from './pages/CompanyRegister';
 import AdminDashboard from './pages/AdminDashboard';
-import AdminStudents from './pages/AdminStudents';
 import CompanyDashboard from './pages/CompanyDashboard';
 import CompanyCreateDrive from './pages/CompanyCreateDrive';
 import CompanyDriveDetail from './pages/CompanyDriveDetail';
@@ -35,7 +34,6 @@ const App = () => {
       '/admin/login',
       '/company/login',
       '/company/register',
-      '/admin/students',
     ];
     if (noHeaderPaths.some((path) => location.pathname.startsWith(path))) {
       return null;
@@ -55,7 +53,6 @@ const App = () => {
       '/admin/login',
       '/company/login',
       '/company/register',
-      '/admin/students',
     ];
     if (noFooterPaths.some((path) => location.pathname.startsWith(path))) {
       return null;
@@ -90,15 +87,6 @@ const App = () => {
                 element={
                   <RequireAuth allowedTypes={['admin']}>
                     <AdminDashboard />
-                  </RequireAuth>
-                }
-              />
-
-              <Route
-                path="/admin/students"
-                element={
-                  <RequireAuth allowedTypes={['admin']}>
-                    <AdminStudents />
                   </RequireAuth>
                 }
               />

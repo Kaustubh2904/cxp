@@ -80,9 +80,14 @@ def format_drive_response(drive: Drive, db: Session):
             "student_group_name": student_group_name
         })
 
+    # Get company name
+    company = db.query(Company).filter(Company.id == drive.company_id).first()
+    company_name = company.company_name if company else None
+
     return {
         "id": drive.id,
         "company_id": drive.company_id,
+        "company_name": company_name,
         "title": drive.title,
         "description": drive.description,
         "question_type": drive.question_type,
@@ -177,7 +182,10 @@ def create_drive(
 
     # Load the drive with targets for response
     drive_with_targets = db.query(Drive).filter(Drive.id == drive.id).first()
-    return format_drive_response(drive_with_targets, db)
+    drive_dict = format_drive_response(drive_with_targets, db)
+    drive_dict["question_count"] = db.query(Question).filter(Question.drive_id == drive.id).count()
+    drive_dict["student_count"] = db.query(Student).filter(Student.drive_id == drive.id).count()
+    return drive_dict
 
 @router.get("/drives/{drive_id}", response_model=DriveResponse)
 def get_drive(
@@ -194,7 +202,10 @@ def get_drive(
     if not drive:
         raise HTTPException(status_code=404, detail="Drive not found")
 
-    return format_drive_response(drive, db)
+    drive_dict = format_drive_response(drive, db)
+    drive_dict["question_count"] = db.query(Question).filter(Question.drive_id == drive.id).count()
+    drive_dict["student_count"] = db.query(Student).filter(Student.drive_id == drive.id).count()
+    return drive_dict
 
 @router.put("/drives/{drive_id}", response_model=DriveResponse)
 def update_drive(
@@ -264,7 +275,10 @@ def update_drive(
     db.commit()
     db.refresh(drive)
 
-    return format_drive_response(drive, db)
+    drive_dict = format_drive_response(drive, db)
+    drive_dict["question_count"] = db.query(Question).filter(Question.drive_id == drive.id).count()
+    drive_dict["student_count"] = db.query(Student).filter(Student.drive_id == drive.id).count()
+    return drive_dict
 
 @router.delete("/drives/{drive_id}")
 def delete_drive(
@@ -321,7 +335,10 @@ def submit_drive_for_approval(
     db.commit()
     db.refresh(drive)
 
-    return drive
+    drive_dict = format_drive_response(drive, db)
+    drive_dict["question_count"] = db.query(Question).filter(Question.drive_id == drive.id).count()
+    drive_dict["student_count"] = db.query(Student).filter(Student.drive_id == drive.id).count()
+    return drive_dict
 
 @router.put("/drives/{drive_id}/status", response_model=DriveResponse)
 def update_drive_status(
@@ -346,7 +363,10 @@ def update_drive_status(
     db.commit()
     db.refresh(drive)
 
-    return drive
+    drive_dict = format_drive_response(drive, db)
+    drive_dict["question_count"] = db.query(Question).filter(Question.drive_id == drive.id).count()
+    drive_dict["student_count"] = db.query(Student).filter(Student.drive_id == drive.id).count()
+    return drive_dict
 
 @router.post("/drives/{drive_id}/duplicate", response_model=DriveResponse)
 def duplicate_drive(
@@ -408,7 +428,10 @@ def duplicate_drive(
     db.commit()
     db.refresh(new_drive)
 
-    return format_drive_response(new_drive, db)
+    drive_dict = format_drive_response(new_drive, db)
+    drive_dict["question_count"] = db.query(Question).filter(Question.drive_id == new_drive.id).count()
+    drive_dict["student_count"] = db.query(Student).filter(Student.drive_id == new_drive.id).count()
+    return drive_dict
 
 # Question management routes
 @router.get("/drives/{drive_id}/questions", response_model=List[QuestionResponse])

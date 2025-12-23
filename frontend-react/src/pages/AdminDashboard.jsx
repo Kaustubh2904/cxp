@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../lib/api';
-import AdminStudents from './AdminStudents';
 import AdminColleges from './AdminColleges';
 
 export default function AdminDashboard() {
@@ -343,16 +342,7 @@ export default function AdminDashboard() {
             >
               Drives
             </button>
-            <button
-              onClick={() => setActiveTab('students')}
-              className={`px-6 py-4 font-semibold border-b-2 cursor-pointer transition ${
-                activeTab === 'students'
-                  ? 'border-red-600 text-red-600 dark:text-red-400'
-                  : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
-              }`}
-            >
-              Students
-            </button>
+
             <button
               onClick={() => setActiveTab('colleges')}
               className={`px-6 py-4 font-semibold border-b-2 cursor-pointer transition ${
@@ -656,8 +646,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ============= STUDENTS TAB ============= */}
-        {activeTab === 'students' && <AdminStudents />}
+
 
         {/* ============= COLLEGES TAB ============= */}
         {activeTab === 'colleges' && <AdminColleges />}
