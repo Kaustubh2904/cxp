@@ -41,6 +41,25 @@ export default function AdminDashboard() {
   const [driveDetailData, setDriveDetailData] = useState(null);
   const [showAllQuestions, setShowAllQuestions] = useState(false);
   const [showAllStudents, setShowAllStudents] = useState(false);
+  const [examStatuses, setExamStatuses] = useState({}); // Track exam status for each drive
+  const [clientTimeRemaining, setClientTimeRemaining] = useState({}); // Client-side countdown
+
+  // Real-time countdown timer
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setClientTimeRemaining(prev => {
+        const updated = { ...prev };
+        Object.keys(updated).forEach(driveId => {
+          if (updated[driveId] > 0) {
+            updated[driveId] = updated[driveId] - 1;
+          }
+        });
+        return updated;
+      });
+    }, 1000); // Update every second
+
+    return () => clearInterval(interval);
+  }, []);
 
   // Modal states for drive actions
   const [approvalModal, setApprovalModal] = useState({
@@ -65,6 +84,14 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (activeTab === 'drives') {
       loadAllDrives();
+      loadExamStatuses();
+      
+      // Refresh exam statuses every 15 seconds to check for auto-start/end
+      const interval = setInterval(() => {
+        loadExamStatuses();
+      }, 15000);
+      
+      return () => clearInterval(interval);
     }
   }, [driveStatusFilter, activeTab]);
 
@@ -167,6 +194,44 @@ export default function AdminDashboard() {
       toast.error(err?.response?.data?.detail || 'Failed to load drives');
     } finally {
       setDrivesLoading(false);
+    }
+  };
+
+  const loadExamStatuses = async () => {
+    try {
+      const res = await api.get(
+        `/admin/drives?status_filter=${driveStatusFilter}&limit=500`
+      );
+      const drivesData = res.data || [];
+      
+      // Load exam status for approved drives
+      const statusPromises = drivesData
+        .filter(d => d.is_approved)
+        .map(async (drive) => {
+          try {
+            const statusRes = await api.get(`/admin/drives/${drive.id}/exam-status`);
+            return { driveId: drive.id, status: statusRes.data };
+          } catch (error) {
+            return { driveId: drive.id, status: null };
+          }
+        });
+      
+      const statuses = await Promise.all(statusPromises);
+      const statusMap = {};
+      const timeMap = {};
+      
+      statuses.forEach(({ driveId, status }) => {
+        statusMap[driveId] = status;
+        // Initialize client-side countdown with server time
+        if (status && status.time_remaining) {
+          timeMap[driveId] = status.time_remaining;
+        }
+      });
+      
+      setExamStatuses(statusMap);
+      setClientTimeRemaining(timeMap);
+    } catch (error) {
+      console.error('Error loading exam statuses:', error);
     }
   };
 
@@ -562,6 +627,9 @@ export default function AdminDashboard() {
                         Status
                       </th>
                       <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">
+                        Exam Status
+                      </th>
+                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">
                         Created
                       </th>
                       <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">
@@ -591,6 +659,32 @@ export default function AdminDashboard() {
                         </td>
                         <td className="px-6 py-4">
                           {getStatusBadge(drive.status)}
+                        </td>
+                        <td className="px-6 py-4">
+                          {drive.is_approved && examStatuses[drive.id] ? (
+                            <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold ${
+                              examStatuses[drive.id].exam_state === 'not_started' 
+                                ? 'bg-gray-100 text-gray-800'
+                                : examStatuses[drive.id].exam_state === 'ongoing'
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-blue-100 text-blue-800'
+                            }`}>
+                              {examStatuses[drive.id].exam_state === 'not_started' && '⏱️ Not Started'}
+                              {examStatuses[drive.id].exam_state === 'ongoing' && (
+                                <>
+                                  🟢 Live
+                                  {clientTimeRemaining[drive.id] > 0 && (
+                                    <span className="ml-1 font-bold">
+                                      ({Math.floor(clientTimeRemaining[drive.id] / 60)}m {Math.floor(clientTimeRemaining[drive.id] % 60)}s)
+                                    </span>
+                                  )}
+                                </>
+                              )}
+                              {(examStatuses[drive.id].exam_state === 'completed' || examStatuses[drive.id].exam_state === 'ended') && '✅ Ended'}
+                            </div>
+                          ) : (
+                            <span className="text-gray-400 text-xs">-</span>
+                          )}
                         </td>
                         <td className="px-6 py-4 text-gray-700 dark:text-gray-300 text-sm">
                           {formatDate(drive.created_at)}

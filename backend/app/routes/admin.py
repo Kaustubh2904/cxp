@@ -217,7 +217,9 @@ def suspend_drive(
     db: Session = Depends(get_db),
     admin: dict = Depends(get_admin_user)
 ):
-    """Suspend a drive (prevent company from using it)"""
+    """Suspend a drive (prevent company from using it). If exam is ongoing, it will be ended immediately."""
+    from datetime import datetime
+    
     drive = db.query(Drive).filter(Drive.id == drive_id).first()
     if not drive:
         raise HTTPException(status_code=404, detail="Drive not found")
@@ -225,15 +227,29 @@ def suspend_drive(
     if drive.status == "suspended":
         raise HTTPException(status_code=400, detail="Drive is already suspended")
     
-    drive.status = "suspended"
+    # If exam is ongoing, end it immediately
+    was_ongoing = False
+    if drive.actual_start and not drive.actual_end:
+        drive.actual_end = datetime.utcnow()
+        was_ongoing = True
+        # Mark as completed since exam has ended
+        drive.status = "completed"
+    else:
+        # If exam not ongoing, just suspend
+        drive.status = "suspended"
     
     db.commit()
     db.refresh(drive)
     
+    message = "Drive suspended successfully"
+    if was_ongoing:
+        message = "Drive suspended and ongoing exam has been ended (marked as completed)"
+    
     return {
-        "message": "Drive suspended successfully",
+        "message": message,
         "drive_id": drive_id,
-        "status": drive.status
+        "status": drive.status,
+        "exam_ended": was_ongoing
     }
 
 @router.put("/drives/{drive_id}/reactivate")
@@ -662,3 +678,63 @@ def delete_student_group(
     db.commit()
     
     return {"message": "Student group deleted successfully"}
+
+@router.get("/drives/{drive_id}/exam-status")
+def get_exam_status_admin(
+    drive_id: int,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(get_admin_user)
+):
+    """Get exam status for a drive (Admin view)"""
+    from datetime import datetime, timezone
+    
+    drive = db.query(Drive).filter(Drive.id == drive_id).first()
+    if not drive:
+        raise HTTPException(status_code=404, detail="Drive not found")
+    
+    now = datetime.now(timezone.utc)
+    
+    # Determine exam state
+    exam_state = "not_started"
+    time_remaining = None
+    can_start = False
+    scheduled_has_passed = False
+    
+    if drive.actual_start:
+        if drive.actual_end:
+            exam_state = "completed"
+        else:
+            exam_state = "ongoing"
+            # Calculate time remaining
+            elapsed_minutes = (now - drive.actual_start.replace(tzinfo=timezone.utc)).total_seconds() / 60
+            time_remaining = max(0, (drive.duration_minutes or 0) - elapsed_minutes) * 60  # in seconds
+            
+            # Auto-end if duration exceeded
+            if time_remaining <= 0:
+                drive.actual_end = now
+                drive.status = "completed"
+                db.commit()
+                exam_state = "completed"
+                time_remaining = 0
+    else:
+        # Can start if approved and has students
+        can_start = drive.is_approved and len(drive.students) > 0
+    
+    # Count students
+    student_count = len(drive.students)
+    has_students = student_count > 0
+    
+    return {
+        "drive_id": drive.id,
+        "exam_state": exam_state,
+        "can_start": can_start and has_students,
+        "scheduled_start": drive.scheduled_start,
+        "scheduled_has_passed": scheduled_has_passed,
+        "actual_start": drive.actual_start,
+        "actual_end": drive.actual_end,
+        "time_remaining": time_remaining,
+        "time_remaining_minutes": time_remaining / 60 if time_remaining else None,
+        "duration_minutes": drive.duration_minutes,
+        "has_students": has_students,
+        "student_count": student_count
+    }

@@ -48,6 +48,8 @@ class DriveResponse(BaseModel):
     targets: List[DriveTargetResponse] = []
     duration_minutes: int
     scheduled_start: Optional[datetime] = None
+    actual_start: Optional[datetime] = None
+    actual_end: Optional[datetime] = None
     status: str  # draft, submitted, approved, rejected, upcoming, live, ongoing, completed
     is_approved: bool
     admin_notes: Optional[str] = None

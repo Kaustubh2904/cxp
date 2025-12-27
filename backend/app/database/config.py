@@ -1,12 +1,15 @@
 from pydantic_settings import BaseSettings
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+# Load .env from app directory (where this config file is)
+env_path = Path(__file__).parent.parent / '.env'
+load_dotenv(env_path)
 
 class Settings(BaseSettings):
     # Database
-    database_url: str = os.getenv("DATABASE_URL", "postgresql://postgres:password@localhost:5432/company_exam_portal")
+    database_url: str = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:password@localhost:5432/company_exam_portal")
     
     # Security
     secret_key: str = os.getenv("SECRET_KEY", "change-this-secret-key-in-production")

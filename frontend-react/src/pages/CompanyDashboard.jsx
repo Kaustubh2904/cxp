@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import companyApi from '../lib/companyApi';
+import api from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 
 // Main component for the Company Dashboard
@@ -17,16 +17,43 @@ const CompanyDashboard = () => {
   });
   const [loading, setLoading] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [examStatuses, setExamStatuses] = useState({}); // Track exam status for each drive
+  const [clientTimeRemaining, setClientTimeRemaining] = useState({}); // Client-side countdown
+
+  // Real-time countdown timer
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setClientTimeRemaining(prev => {
+        const updated = { ...prev };
+        Object.keys(updated).forEach(driveId => {
+          if (updated[driveId] > 0) {
+            updated[driveId] = updated[driveId] - 1;
+          }
+        });
+        return updated;
+      });
+    }, 1000); // Update every second
+
+    return () => clearInterval(interval);
+  }, []);
 
   // Load initial data
   useEffect(() => {
     loadDashboardData();
     loadDrives();
+    loadExamStatuses();
+    
+    // Refresh exam statuses every 15 seconds to check for auto-start/end
+    const interval = setInterval(() => {
+      loadExamStatuses();
+    }, 15000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   const loadDashboardData = async () => {
     try {
-      const response = await companyApi.getCompanyDrives();
+      const response = await api.get('/company/drives');
       const drivesData = response.data;
       setDashboardStats({
         total: drivesData.length,
@@ -50,7 +77,7 @@ const CompanyDashboard = () => {
   const loadDrives = async () => {
     setLoading(true);
     try {
-      const response = await companyApi.getCompanyDrives();
+      const response = await api.get('/company/drives');
       setDrives(response.data);
     } catch (error) {
       console.error('Error loading drives:', error);
@@ -72,7 +99,7 @@ const CompanyDashboard = () => {
       return;
 
     try {
-      await companyApi.submitDriveForApproval(driveId);
+      await api.put(`/company/drives/${driveId}/submit`);
       toast.success('Drive submitted for approval');
       loadDrives();
       loadDashboardData();
@@ -88,7 +115,7 @@ const CompanyDashboard = () => {
     if (!confirm('Duplicate this drive?')) return;
 
     try {
-      await companyApi.duplicateDrive(driveId);
+      await api.post(`/company/drives/${driveId}/duplicate`);
       toast.success('Drive duplicated');
       loadDrives();
       loadDashboardData();
@@ -104,13 +131,81 @@ const CompanyDashboard = () => {
     if (!confirm('Delete this drive?')) return;
 
     try {
-      await companyApi.deleteDrive(driveId);
+      await api.delete(`/company/drives/${driveId}`);
       toast.success('Drive deleted');
       loadDrives();
       loadDashboardData();
     } catch (error) {
       toast.error(
         'Error deleting drive: ' +
+          (error.response?.data?.detail || error.message)
+      );
+    }
+  };
+
+  const loadExamStatuses = async () => {
+    try {
+      const response = await api.get('/company/drives');
+      const drivesData = response.data;
+      
+      // Load exam status for approved drives
+      const statusPromises = drivesData
+        .filter(d => d.is_approved)
+        .map(async (drive) => {
+          try {
+            const statusRes = await api.get(`/company/drives/${drive.id}/exam-status`);
+            return { driveId: drive.id, status: statusRes.data };
+          } catch (error) {
+            return { driveId: drive.id, status: null };
+          }
+        });
+      
+      const statuses = await Promise.all(statusPromises);
+      const statusMap = {};
+      const timeMap = {};
+      
+      statuses.forEach(({ driveId, status }) => {
+        statusMap[driveId] = status;
+        // Initialize client-side countdown with server time
+        if (status && status.time_remaining) {
+          timeMap[driveId] = status.time_remaining;
+        }
+      });
+      
+      setExamStatuses(statusMap);
+      setClientTimeRemaining(timeMap);
+    } catch (error) {
+      console.error('Error loading exam statuses:', error);
+    }
+  };
+
+  const startExam = async (driveId) => {
+    if (!confirm('Are you sure you want to start the exam now?')) return;
+
+    try {
+      await api.post(`/company/drives/${driveId}/start`);
+      toast.success('Exam started successfully!');
+      loadExamStatuses();
+      loadDrives();
+    } catch (error) {
+      toast.error(
+        'Error starting exam: ' +
+          (error.response?.data?.detail || error.message)
+      );
+    }
+  };
+
+  const endExam = async (driveId) => {
+    if (!confirm('Are you sure you want to end the exam now?')) return;
+
+    try {
+      await api.post(`/company/drives/${driveId}/end`);
+      toast.success('Exam ended successfully!');
+      loadExamStatuses();
+      loadDrives();
+    } catch (error) {
+      toast.error(
+        'Error ending exam: ' +
           (error.response?.data?.detail || error.message)
       );
     }
@@ -418,6 +513,67 @@ const CompanyDashboard = () => {
                               </span>
                             </div>
 
+                            {/* Exam Status Display */}
+                            {drive.is_approved && examStatuses[drive.id] && (
+                              <>
+                                <div className={`mb-4 p-3 rounded-lg border ${
+                                  examStatuses[drive.id].exam_state === 'not_started' 
+                                    ? 'bg-gradient-to-r from-gray-50 to-slate-50 border-gray-300'
+                                    : examStatuses[drive.id].exam_state === 'ongoing'
+                                    ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-300'
+                                    : 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-300'
+                                }`}>
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex-1">
+                                      <p className="text-xs font-semibold text-gray-700 mb-1">
+                                        Exam Status
+                                      </p>
+                                      <p className={`text-sm font-bold ${
+                                        examStatuses[drive.id].exam_state === 'not_started' 
+                                          ? 'text-gray-900'
+                                          : examStatuses[drive.id].exam_state === 'ongoing'
+                                          ? 'text-green-900'
+                                          : 'text-blue-900'
+                                      }`}>
+                                        {examStatuses[drive.id].exam_state === 'not_started' && '⏱️ Not Started'}
+                                        {examStatuses[drive.id].exam_state === 'ongoing' && '🟢 Live - Ongoing'}
+                                        {(examStatuses[drive.id].exam_state === 'completed' || examStatuses[drive.id].exam_state === 'ended') && '✅ Ended'}
+                                      </p>
+                                      {examStatuses[drive.id].scheduled_start && 
+                                       examStatuses[drive.id].exam_state === 'not_started' && (
+                                        <p className="text-xs text-gray-600 mt-1">
+                                          📅 {new Date(examStatuses[drive.id].scheduled_start).toLocaleString('en-US', {
+                                            month: 'short',
+                                            day: 'numeric',
+                                            hour: '2-digit',
+                                            minute: '2-digit'
+                                          })}
+                                        </p>
+                                    )}
+                                  </div>
+                                  {examStatuses[drive.id].exam_state === 'ongoing' && clientTimeRemaining[drive.id] > 0 && (
+                                    <div className="text-right">
+                                      <p className="text-xs text-green-700 font-medium">Time Left</p>
+                                      <p className="text-lg font-bold text-green-900">
+                                        {Math.floor(clientTimeRemaining[drive.id] / 60)}m {Math.floor(clientTimeRemaining[drive.id] % 60)}s
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
+                                </div>
+                                
+                                {/* Warning if no students added yet */}
+                                {!examStatuses[drive.id].has_students && 
+                                 examStatuses[drive.id].exam_state === 'not_started' && (
+                                  <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                                    <p className="text-xs text-yellow-800">
+                                      ⚠️ Add students and send emails before starting the exam
+                                    </p>
+                                  </div>
+                                )}
+                              </>
+                            )}
+
                             <div className="flex flex-wrap gap-2">
                               <button
                                 onClick={() =>
@@ -429,6 +585,30 @@ const CompanyDashboard = () => {
                               >
                                 View
                               </button>
+                              
+                              {/* Start Exam Button - Only show if approved and not started */}
+                              {drive.is_approved && 
+                               examStatuses[drive.id]?.exam_state === 'not_started' && 
+                               examStatuses[drive.id]?.can_start && (
+                                <button
+                                  onClick={() => startExam(drive.id)}
+                                  className="flex-1 px-4 py-2 bg-linear-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white text-sm rounded-lg font-semibold transition"
+                                >
+                                  🚀 Start Exam
+                                </button>
+                              )}
+
+                              {/* End Exam Button - Only show if ongoing */}
+                              {drive.is_approved && 
+                               examStatuses[drive.id]?.exam_state === 'ongoing' && (
+                                <button
+                                  onClick={() => endExam(drive.id)}
+                                  className="flex-1 px-4 py-2 bg-linear-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-sm rounded-lg font-semibold transition"
+                                >
+                                  ⏹️ End Exam
+                                </button>
+                              )}
+
                               {drive.is_approved && (
                                 <button
                                   onClick={() =>

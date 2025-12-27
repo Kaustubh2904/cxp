@@ -7,10 +7,24 @@ from app.database.config import settings
 
 logger = logging.getLogger(__name__)
 
+# Convert database URL to use psycopg3 driver
+def get_database_url():
+    """Convert database URL to psycopg3 format"""
+    db_url = settings.database_url
+    
+    # If URL starts with postgresql://, replace with postgresql+psycopg://
+    if db_url.startswith("postgresql://"):
+        db_url = db_url.replace("postgresql://", "postgresql+psycopg://", 1)
+    elif not db_url.startswith("postgresql+psycopg://"):
+        # If it doesn't have a driver specified, add psycopg
+        db_url = db_url.replace("postgresql", "postgresql+psycopg", 1)
+    
+    return db_url
+
 # Create engine with proper connection pooling and error handling
 try:
     engine = create_engine(
-        settings.database_url,
+        get_database_url(),
         pool_pre_ping=True,  # Validate connections before use
         pool_recycle=3600,   # Recycle connections every hour
         pool_size=5,         # Connection pool size
@@ -19,6 +33,7 @@ try:
     )
 except Exception as e:
     logger.error(f"❌ Failed to create database engine: {str(e)}")
+    logger.error(f"Database URL format: {get_database_url().split('@')[0]}@...")  # Log URL without password
     raise
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
