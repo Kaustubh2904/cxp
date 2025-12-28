@@ -14,8 +14,10 @@ export default function CompanyDriveDetail() {
   const [drive, setDrive] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [students, setStudents] = useState([]);
+  const [examStatus, setExamStatus] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
+  const [isEndingExam, setIsEndingExam] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -24,12 +26,19 @@ export default function CompanyDriveDetail() {
       return;
     }
     loadDriveData();
+    
+    // Poll exam status every 30 seconds to check for auto-end
+    const intervalId = setInterval(() => {
+      loadExamStatus();
+    }, 30000);
+    
+    return () => clearInterval(intervalId);
   }, [driveId]);
 
   const loadDriveData = async () => {
     setIsLoading(true);
     try {
-      const [driveRes, questionsRes, studentsRes] = await Promise.all([
+      const [driveRes, questionsRes, studentsRes, examStatusRes] = await Promise.all([
         api.get(`/company/drives/${driveId}`),
         api.get(`/company/drives/${driveId}/questions`).catch((err) => {
           console.error('Failed to load questions:', err);
@@ -39,15 +48,56 @@ export default function CompanyDriveDetail() {
           console.error('Failed to load students:', err);
           return { data: [] };
         }),
+        api.get(`/company/drives/${driveId}/exam-status`).catch((err) => {
+          console.error('Failed to load exam status:', err);
+          return { data: null };
+        }),
       ]);
 
       setDrive(driveRes.data);
       setQuestions(questionsRes.data || []);
       setStudents(studentsRes.data || []);
+      setExamStatus(examStatusRes.data || null);
     } catch (err) {
       toast.error(err?.response?.data?.detail || 'Failed to load drive data');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadExamStatus = async () => {
+    try {
+      const res = await api.get(`/company/drives/${driveId}/exam-status`);
+      setExamStatus(res.data);
+      
+      // If exam auto-ended, reload drive data to update status
+      if (res.data.should_auto_end) {
+        toast.info('Exam has automatically ended after duration elapsed');
+        loadDriveData();
+      }
+    } catch (err) {
+      console.error('Failed to load exam status:', err);
+    }
+  };
+
+  const handleEndExam = async () => {
+    if (
+      !window.confirm(
+        'Are you sure you want to end the exam? This will prevent students from continuing the test.'
+      )
+    ) {
+      return;
+    }
+
+    setIsEndingExam(true);
+    try {
+      await api.post(`/company/drives/${driveId}/end`);
+      toast.success('Exam ended successfully!');
+      await loadDriveData();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'Failed to end exam');
+    } finally {
+      setIsEndingExam(false);
     }
   };
 
@@ -295,6 +345,108 @@ export default function CompanyDriveDetail() {
                     </div>
                   </div>
 
+                  {/* Scheduled Start Time */}
+                  {drive.scheduled_start && (
+                    <div className="mb-6 bg-blue-50 border border-blue-200 rounded-xl p-6">
+                      <p className="text-sm font-semibold text-blue-900 mb-2">
+                        📅 Scheduled Start Time
+                      </p>
+                      <p className="text-blue-800 font-medium">
+                        {new Date(drive.scheduled_start).toLocaleString()}
+                      </p>
+                      {examStatus && !examStatus.scheduled_has_passed && !drive.actual_start && (
+                        <p className="text-blue-700 text-sm mt-2">
+                          ⏰ Exam will start automatically at this time, or you can start it manually.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Exam Status Display */}
+                  {examStatus && (
+                    <div className="mb-6">
+                      {examStatus.exam_state === 'not_started' && (
+                        <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
+                          <p className="text-blue-800 font-bold flex items-center gap-2 mb-2">
+                            <span>ℹ️</span>
+                            <span>Exam has not started yet</span>
+                          </p>
+                          {examStatus.is_scheduled && !examStatus.scheduled_has_passed ? (
+                            <p className="text-blue-700 text-sm">
+                              Will start automatically at scheduled time, or start manually from the Send Emails page.
+                            </p>
+                          ) : (
+                            <p className="text-blue-700 text-sm">
+                              Navigate to Send Emails page to start the exam.
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {examStatus.exam_state === 'ongoing' && (
+                        <div className="bg-green-50 border border-green-200 rounded-xl p-6">
+                          <p className="text-green-800 font-bold flex items-center gap-2 mb-3">
+                            <span>🟢</span>
+                            <span>Exam is Currently Ongoing</span>
+                          </p>
+                          <div className="space-y-2 text-sm text-green-700 mb-4">
+                            {drive.actual_start && (
+                              <p>
+                                <strong>Started at:</strong>{' '}
+                                {new Date(drive.actual_start).toLocaleString()}
+                              </p>
+                            )}
+                            <p>
+                              <strong>Duration:</strong> {drive.duration_minutes} minutes
+                            </p>
+                            {examStatus.time_remaining_minutes !== null && (
+                              <p className="text-lg font-bold text-green-900">
+                                ⏱️ Time Remaining:{' '}
+                                {Math.round(examStatus.time_remaining_minutes)} minutes
+                              </p>
+                            )}
+                          </div>
+                          <p className="text-green-700 text-xs mb-4">
+                            Note: Exam will automatically end when duration expires.
+                          </p>
+                          {examStatus.can_end && (
+                            <button
+                              onClick={handleEndExam}
+                              disabled={isEndingExam}
+                              className="w-full px-6 py-3 bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white rounded-lg font-bold transition shadow-lg flex items-center justify-center gap-2"
+                            >
+                              <span>{isEndingExam ? '⏳' : '🛑'}</span>
+                              {isEndingExam ? 'Ending Exam...' : 'End Exam Manually'}
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {examStatus.exam_state === 'ended' && (
+                        <div className="bg-gray-50 border border-gray-200 rounded-xl p-6">
+                          <p className="text-gray-800 font-bold flex items-center gap-2 mb-3">
+                            <span>🏁</span>
+                            <span>Exam Has Ended</span>
+                          </p>
+                          <div className="space-y-2 text-sm text-gray-700">
+                            {drive.actual_start && (
+                              <p>
+                                <strong>Started at:</strong>{' '}
+                                {new Date(drive.actual_start).toLocaleString()}
+                              </p>
+                            )}
+                            {drive.actual_end && (
+                              <p>
+                                <strong>Ended at:</strong>{' '}
+                                {new Date(drive.actual_end).toLocaleString()}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {drive.is_approved ? (
                     <div className="bg-green-50 border border-green-200 rounded-xl p-6">
                       <p className="text-green-800 flex items-center gap-2">
@@ -307,6 +459,84 @@ export default function CompanyDriveDetail() {
                         <span>⚠️</span> Drive is not yet approved. Approval
                         status: {drive.status}
                       </p>
+                    </div>
+                  )}
+
+                  {/* Exam Status and Control */}
+                  {examStatus && (
+                    <div className="mt-6">
+                      {examStatus.exam_state === 'not_started' && drive.is_approved && (
+                        <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
+                          <p className="text-blue-800 flex items-center gap-2 mb-4">
+                            <span>ℹ️</span> 
+                            <span className="font-semibold">
+                              Exam has not started yet. Send emails to students first.
+                            </span>
+                          </p>
+                          <button
+                            onClick={() => navigate(`/company-send-emails?id=${driveId}`)}
+                            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition"
+                          >
+                            Go to Send Emails
+                          </button>
+                        </div>
+                      )}
+
+                      {examStatus.exam_state === 'ongoing' && (
+                        <div className="bg-green-50 border border-green-200 rounded-xl p-6">
+                          <div className="flex items-start justify-between mb-4">
+                            <div>
+                              <p className="text-green-800 font-bold flex items-center gap-2 text-lg mb-2">
+                                <span>🟢</span> Exam is Currently Ongoing
+                              </p>
+                              <p className="text-green-700 text-sm mb-1">
+                                Started at: {new Date(examStatus.actual_start).toLocaleString()}
+                              </p>
+                              <p className="text-green-700 text-sm mb-1">
+                                Duration: {examStatus.duration_minutes} minutes
+                              </p>
+                              {examStatus.time_remaining_minutes !== null && (
+                                <p className="text-green-700 text-sm font-semibold">
+                                  ⏱️ Time Remaining: {Math.round(examStatus.time_remaining_minutes)} minutes
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="bg-white/50 border border-green-300 rounded-lg p-4 mb-4">
+                            <p className="text-green-800 text-sm">
+                              <span className="font-semibold">Note:</span> The exam will automatically 
+                              end when the duration is complete. You can also manually end it using 
+                              the button below.
+                            </p>
+                          </div>
+                          <button
+                            onClick={handleEndExam}
+                            disabled={isEndingExam}
+                            className="w-full px-6 py-3 bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white rounded-lg font-bold transition flex items-center justify-center gap-2"
+                          >
+                            <span>{isEndingExam ? '⏳' : '🛑'}</span>
+                            {isEndingExam ? 'Ending Exam...' : 'End Exam Manually'}
+                          </button>
+                        </div>
+                      )}
+
+                      {examStatus.exam_state === 'ended' && (
+                        <div className="bg-gray-50 border border-gray-300 rounded-xl p-6">
+                          <p className="text-gray-800 font-bold flex items-center gap-2 text-lg mb-2">
+                            <span>🏁</span> Exam Has Ended
+                          </p>
+                          {examStatus.actual_start && (
+                            <p className="text-gray-700 text-sm mb-1">
+                              Started at: {new Date(examStatus.actual_start).toLocaleString()}
+                            </p>
+                          )}
+                          {examStatus.actual_end && (
+                            <p className="text-gray-700 text-sm">
+                              Ended at: {new Date(examStatus.actual_end).toLocaleString()}
+                            </p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

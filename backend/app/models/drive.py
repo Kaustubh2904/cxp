@@ -15,6 +15,8 @@ class Drive(Base):
     question_type = Column(String, nullable=False)  # mcqs, aptitude, coding, technical, hr
     duration_minutes = Column(Integer, nullable=False)
     scheduled_start = Column(DateTime, nullable=True)
+    actual_start = Column(DateTime, nullable=True)  # When exam actually started
+    actual_end = Column(DateTime, nullable=True)  # When exam actually ended
     status = Column(String, default="draft")  # draft, submitted, approved, rejected, upcoming, live, ongoing, completed
     is_approved = Column(Boolean, default=False)
     admin_notes = Column(Text, nullable=True)

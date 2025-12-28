@@ -1077,3 +1077,148 @@ async def upload_students_csv(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=f"Error processing CSV: {str(e)}")
+
+
+# Exam Control Endpoints
+@router.post("/drives/{drive_id}/start")
+def start_exam(
+    drive_id: int,
+    db: Session = Depends(get_db),
+    company: dict = Depends(get_company_user)
+):
+    """Start the exam - sets actual_start time and changes status to ongoing"""
+    drive = db.query(Drive).filter(
+        Drive.id == drive_id,
+        Drive.company_id == company.id
+    ).first()
+
+    if not drive:
+        raise HTTPException(status_code=404, detail="Drive not found")
+
+    if not drive.is_approved:
+        raise HTTPException(status_code=400, detail="Cannot start exam for unapproved drive")
+
+    if drive.actual_start:
+        raise HTTPException(status_code=400, detail="Exam has already been started")
+
+    # Set the actual start time and update status
+    drive.actual_start = datetime.utcnow()
+    drive.status = "ongoing"
+    
+    db.commit()
+    db.refresh(drive)
+
+    drive_dict = format_drive_response(drive, db)
+    drive_dict["question_count"] = db.query(Question).filter(Question.drive_id == drive.id).count()
+    drive_dict["student_count"] = db.query(Student).filter(Student.drive_id == drive.id).count()
+    
+    return {
+        "success": True,
+        "message": "Exam started successfully",
+        "drive": drive_dict
+    }
+
+
+@router.post("/drives/{drive_id}/end")
+def end_exam(
+    drive_id: int,
+    db: Session = Depends(get_db),
+    company: dict = Depends(get_company_user)
+):
+    """Manually end the exam - sets actual_end time and changes status to completed"""
+    drive = db.query(Drive).filter(
+        Drive.id == drive_id,
+        Drive.company_id == company.id
+    ).first()
+
+    if not drive:
+        raise HTTPException(status_code=404, detail="Drive not found")
+
+    if not drive.actual_start:
+        raise HTTPException(status_code=400, detail="Cannot end exam that hasn't been started")
+
+    if drive.actual_end:
+        raise HTTPException(status_code=400, detail="Exam has already been ended")
+
+    # Set the actual end time and update status
+    drive.actual_end = datetime.utcnow()
+    drive.status = "completed"
+    
+    db.commit()
+    db.refresh(drive)
+
+    drive_dict = format_drive_response(drive, db)
+    drive_dict["question_count"] = db.query(Question).filter(Question.drive_id == drive.id).count()
+    drive_dict["student_count"] = db.query(Student).filter(Student.drive_id == drive.id).count()
+    
+    return {
+        "success": True,
+        "message": "Exam ended successfully",
+        "drive": drive_dict
+    }
+
+
+@router.get("/drives/{drive_id}/exam-status")
+def get_exam_status(
+    drive_id: int,
+    db: Session = Depends(get_db),
+    company: dict = Depends(get_company_user)
+):
+    """Get the current exam status including auto-end check and scheduled auto-start"""
+    drive = db.query(Drive).filter(
+        Drive.id == drive_id,
+        Drive.company_id == company.id
+    ).first()
+
+    if not drive:
+        raise HTTPException(status_code=404, detail="Drive not found")
+
+    # Check if students exist (indicates emails have been sent or ready to send)
+    student_count = db.query(Student).filter(Student.drive_id == drive_id).count()
+    has_students = student_count > 0
+
+    # Check if exam should be auto-ended
+    should_auto_end = False
+    time_remaining_minutes = None
+    
+    if drive.actual_start and not drive.actual_end:
+        elapsed_time = datetime.utcnow() - drive.actual_start
+        elapsed_minutes = elapsed_time.total_seconds() / 60
+        
+        if elapsed_minutes >= drive.duration_minutes:
+            # Auto-end the exam
+            drive.actual_end = datetime.utcnow()
+            drive.status = "completed"
+            db.commit()
+            should_auto_end = True
+        else:
+            time_remaining_minutes = drive.duration_minutes - elapsed_minutes
+
+    # Determine exam state
+    if not drive.actual_start:
+        exam_state = "not_started"
+    elif drive.actual_end:
+        exam_state = "ended"
+    else:
+        exam_state = "ongoing"
+
+    # Convert time remaining to seconds for consistency
+    time_remaining_seconds = time_remaining_minutes * 60 if time_remaining_minutes else None
+
+    return {
+        "drive_id": drive_id,
+        "exam_state": exam_state,
+        "actual_start": drive.actual_start,
+        "actual_end": drive.actual_end,
+        "scheduled_start": drive.scheduled_start,
+        "duration_minutes": drive.duration_minutes,
+        "time_remaining": time_remaining_seconds,
+        "time_remaining_minutes": time_remaining_minutes,
+        "should_auto_end": should_auto_end,
+        "can_start": drive.is_approved and not drive.actual_start and has_students,
+        "can_end": drive.actual_start and not drive.actual_end,
+        "status": drive.status,
+        "is_scheduled": drive.scheduled_start is not None,
+        "has_students": has_students,
+        "student_count": student_count
+    }

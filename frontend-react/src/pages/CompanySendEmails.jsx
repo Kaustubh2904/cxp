@@ -20,6 +20,8 @@ export default function CompanySendEmails() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSendingEmails, setIsSendingEmails] = useState(false);
+  const [isStartingExam, setIsStartingExam] = useState(false);
+  const [examStatus, setExamStatus] = useState(null);
   const [previewText, setPreviewText] = useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -45,7 +47,7 @@ export default function CompanySendEmails() {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [statusRes, configRes] = await Promise.all([
+      const [statusRes, configRes, examStatusRes] = await Promise.all([
         api.get(`/company/drives/${driveId}/email-status`).catch(() => null),
         api.get(`/company/email-template`).catch(() => ({
           data: {
@@ -55,10 +57,12 @@ export default function CompanySendEmails() {
             use_custom_template: true,
           },
         })),
+        api.get(`/company/drives/${driveId}/exam-status`).catch(() => null),
       ]);
 
       setEmailStatus(statusRes?.data || null);
       setEmailConfig(configRes.data);
+      setExamStatus(examStatusRes?.data || null);
     } catch (err) {
       toast.error(err?.response?.data?.detail || 'Failed to load data');
     } finally {
@@ -121,7 +125,8 @@ export default function CompanySendEmails() {
       toast.success(
         `Emails sent successfully to ${res.data?.sent_count || 0} students!`
       );
-      setTimeout(() => navigate('/company-dashboard'), 2000);
+      // Reload data to update exam status
+      await loadData();
     } catch (err) {
       toast.error(err?.response?.data?.detail || 'Failed to send emails');
     } finally {
@@ -431,7 +436,7 @@ export default function CompanySendEmails() {
                   </h3>
                 </div>
 
-                <div className="p-8">
+                <div className="p-8 space-y-4">
                   <button
                     onClick={handleSendEmails}
                     disabled={isSendingEmails || !canSendEmails}
@@ -450,6 +455,48 @@ export default function CompanySendEmails() {
                       <span className="font-semibold">Note:</span> Send emails
                       button is disabled. Please ensure drive is approved and
                       has students.
+                    </div>
+                  )}
+
+                  {/* Exam Status Info - Just informational */}
+                  {examStatus && (
+                    <div className="pt-6 border-t border-gray-200">
+                      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
+                        <p className="text-blue-800 font-semibold mb-2">
+                          � Exam Status
+                        </p>
+                        {examStatus.scheduled_start && (
+                          <p className="text-blue-700 text-sm mb-2">
+                            📅 Scheduled Start:{' '}
+                            <strong>
+                              {new Date(examStatus.scheduled_start).toLocaleString()}
+                            </strong>
+                          </p>
+                        )}
+                        {examStatus.exam_state === 'not_started' && (
+                          <p className="text-blue-700 text-sm">
+                            ⏱️ Status: <strong>Not Started</strong>
+                          </p>
+                        )}
+                        {examStatus.exam_state === 'ongoing' && (
+                          <p className="text-green-700 text-sm">
+                            🟢 Status: <strong>Ongoing</strong> - Time remaining:{' '}
+                            {Math.round(examStatus.time_remaining_minutes || 0)} minutes
+                          </p>
+                        )}
+                        {(examStatus.exam_state === 'completed' ||
+                          examStatus.exam_state === 'ended') && (
+                          <p className="text-gray-700 text-sm">
+                            🏁 Status: <strong>Completed</strong>
+                          </p>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => navigate(`/company-dashboard`)}
+                        className="w-full px-6 py-3 bg-linear-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-xl font-semibold transition shadow-lg"
+                      >
+                        Go to Dashboard to Control Exam
+                      </button>
                     </div>
                   )}
                 </div>
